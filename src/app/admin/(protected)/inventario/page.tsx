@@ -8,7 +8,7 @@ import { EstadoBadge } from "@/components/product/estado-badge";
 import { EmptyState } from "@/components/site/empty-state";
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { MovementDialog } from "@/components/admin/inventory/movement-dialog";
-import { InventoryFilters } from "@/components/admin/inventory/inventory-filters";
+import { SearchBox } from "@/components/admin/search-box";
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 import type { Prisma, ProductStatus } from "@/generated/prisma/client";
@@ -101,7 +101,7 @@ export default async function AdminInventoryPage({
         </Link>
       </div>
 
-      <InventoryFilters />
+      <SearchBox placeholder="Buscar producto..." />
 
       {items.length === 0 ? (
         <EmptyState title="Sin resultados" description="No hay productos con esos filtros." />

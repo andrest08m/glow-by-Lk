@@ -4,8 +4,15 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
-export function InventoryFilters() {
+export function SearchBox({
+  placeholder = "Buscar...",
+  className,
+}: {
+  placeholder?: string;
+  className?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -32,14 +39,14 @@ export function InventoryFilters() {
   }, [q]);
 
   return (
-    <div className="relative max-w-md">
+    <div className={cn("relative max-w-md", className)}>
       <Search className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Buscar producto..."
+        placeholder={placeholder}
         className="pl-10"
-        aria-label="Buscar producto en inventario"
+        aria-label={placeholder}
       />
     </div>
   );
