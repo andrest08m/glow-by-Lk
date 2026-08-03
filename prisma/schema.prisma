@@ -1,0 +1,182 @@
+// glow by Lk — schema Fase 1 (completo) + Fase 2 (solo modelos, sin UI)
+// docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ========================= FASE 1 =========================
+
+model Product {
+  id               String        @id @default(cuid())
+  nombre           String
+  slug             String        @unique
+  codigoInterno    String?       @unique
+  sku              String?       @unique
+  descripcionCorta String?
+  descripcionLarga String?
+  precio           Decimal       @db.Decimal(10, 2)
+  precioOferta     Decimal?      @db.Decimal(10, 2)
+  costo            Decimal?      @db.Decimal(10, 2)
+  cantidad         Int           @default(0)
+  stockMinimo      Int           @default(5)
+  estado           ProductStatus @default(DISPONIBLE)
+  destacado        Boolean       @default(false)
+  nuevo            Boolean       @default(false)
+  masVendido       Boolean       @default(false)
+  activo           Boolean       @default(true)
+  orden            Int           @default(0)
+
+  brandId       String?
+  brand         Brand?       @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  categoryId    String?
+  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId String?
+  subcategory   Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+
+  images ProductImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relaciones de Fase 2 (definidas, sin UI todavía)
+  orderItems         OrderItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([activo, destacado])
+  @@index([activo, nuevo])
+  @@index([activo, masVendido])
+  @@index([brandId])
+  @@index([categoryId])
+  @@index([subcategoryId])
+}
+
+enum ProductStatus {
+  DISPONIBLE
+  POCO_STOCK
+  AGOTADO
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  url       String
+  alt       String?
+  orden     Int     @default(0)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Brand {
+  id       String    @id @default(cuid())
+  nombre   String
+  slug     String    @unique
+  imagen   String?
+  orden    Int       @default(0)
+  products Product[]
+}
+
+model Category {
+  id            String        @id @default(cuid())
+  nombre        String
+  slug          String        @unique
+  imagen        String?
+  orden         Int           @default(0)
+  subcategories Subcategory[]
+  products      Product[]
+}
+
+model Subcategory {
+  id         String   @id @default(cuid())
+  nombre     String
+  slug       String
+  orden      Int      @default(0)
+  categoryId String
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products   Product[]
+
+  @@unique([categoryId, slug])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  nombre       String?
+  createdAt    DateTime @default(now())
+}
+
+model SiteSetting {
+  clave String @id
+  valor String
+}
+
+// ================= FASE 2 (solo schema, sin UI) =================
+
+model InventoryMovement {
+  id        String       @id @default(cuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id])
+  tipo      MovementType
+  cantidad  Int
+  motivo    String?
+  fecha     DateTime     @default(now())
+
+  @@index([productId])
+}
+
+enum MovementType {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  nombre    String
+  whatsapp  String   @unique
+  direccion String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  customerId      String?
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  clienteNombre   String
+  clienteTelefono String
+  items           OrderItem[]
+  total           Decimal     @db.Decimal(10, 2)
+  estado          OrderStatus @default(PENDIENTE)
+  createdAt       DateTime    @default(now())
+
+  @@index([customerId])
+}
+
+enum OrderStatus {
+  PENDIENTE
+  CONFIRMADO
+  ENVIADO
+  ENTREGADO
+  CANCELADO
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@index([productId])
+}

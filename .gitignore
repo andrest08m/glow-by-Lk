@@ -42,3 +42,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# skills de referencia auto-generadas por `prisma init` para agentes IA (no son parte de la app)
+/.claude/skills/prisma-*
+/.windsurf/skills/prisma-*
+/.agents/skills/prisma-*
+/skills-lock.json
