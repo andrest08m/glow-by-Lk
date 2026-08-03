@@ -120,15 +120,20 @@ model SiteSetting {
 // ================= FASE 2 (solo schema, sin UI) =================
 
 model InventoryMovement {
-  id        String       @id @default(cuid())
-  productId String
-  product   Product      @relation(fields: [productId], references: [id])
-  tipo      MovementType
-  cantidad  Int
-  motivo    String?
-  fecha     DateTime     @default(now())
+  id              String       @id @default(cuid())
+  productId       String
+  product         Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tipo            MovementType
+  cantidad        Int // con signo: ENTRADA +n, SALIDA -n, AJUSTE ±delta
+  saldoResultante Int // stock del producto justo después de este movimiento
+  motivo          String?
+  adminEmail      String?
+  orderId         String?
+  order           Order?       @relation(fields: [orderId], references: [id])
+  fecha           DateTime     @default(now())
 
-  @@index([productId])
+  @@index([productId, fecha])
+  @@index([orderId])
 }
 
 enum MovementType {
@@ -148,6 +153,7 @@ model Customer {
 
 model Order {
   id              String      @id @default(cuid())
+  numero          Int         @unique @default(autoincrement())
   customerId      String?
   customer        Customer?   @relation(fields: [customerId], references: [id])
   clienteNombre   String
@@ -155,14 +161,20 @@ model Order {
   items           OrderItem[]
   total           Decimal     @db.Decimal(10, 2)
   estado          OrderStatus @default(PENDIENTE)
+  // true mientras el stock esté descontado (se descuenta al confirmar, se devuelve al cancelar)
+  stockDescontado Boolean     @default(false)
+  movements       InventoryMovement[]
   createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([customerId])
+  @@index([estado, createdAt])
 }
 
 enum OrderStatus {
   PENDIENTE
   CONFIRMADO
+  EN_PREPARACION
   ENVIADO
   ENTREGADO
   CANCELADO
