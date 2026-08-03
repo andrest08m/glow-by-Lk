@@ -150,16 +150,29 @@ export async function updateProduct(id: string, formData: FormData) {
   return { id };
 }
 
-export async function deleteProduct(id: string) {
+export type DeleteProductResult = { ok: true } | { ok: false; error: string };
+
+export async function deleteProduct(id: string): Promise<DeleteProductResult> {
   await requireAdminSession();
 
-  const product = await prisma.product.findUnique({ where: { id }, include: { images: true } });
-  if (!product) return;
+  const product = await prisma.product.findUnique({
+    where: { id },
+    include: { images: true, _count: { select: { orderItems: true } } },
+  });
+  if (!product) return { ok: true };
 
-  await Promise.all(product.images.map((img) => deleteImageByUrl(img.url)));
+  if (product._count.orderItems > 0) {
+    return {
+      ok: false,
+      error: `"${product.nombre}" aparece en ${product._count.orderItems} pedido(s) y no se puede eliminar. Desactívalo para ocultarlo del catálogo.`,
+    };
+  }
+
   await prisma.product.delete({ where: { id } });
+  await Promise.all(product.images.map((img) => deleteImageByUrl(img.url)));
 
   revalidateCatalog(product.slug);
+  return { ok: true };
 }
 
 export async function duplicateProduct(id: string) {

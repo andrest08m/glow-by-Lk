@@ -71,7 +71,12 @@ export function ProductsTable({ items }: { items: AdminProductRow[] }) {
     if (!deleteTarget) return;
     const target = deleteTarget;
     startTransition(async () => {
-      await deleteProduct(target.id);
+      const result = await deleteProduct(target.id);
+      if (!result.ok) {
+        toast.error(result.error);
+        setDeleteTarget(null);
+        return;
+      }
       toast.success("Producto eliminado");
       setDeleteTarget(null);
       router.refresh();
