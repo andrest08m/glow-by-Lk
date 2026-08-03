@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Plus } from "lucide-react";
+import { Plus, Download, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductsFilters } from "@/components/admin/products/products-filters";
 import { ProductsTable, type AdminProductRow } from "@/components/admin/products/products-table";
@@ -58,9 +58,17 @@ export default async function AdminProductsPage({
             {result.total} producto{result.total === 1 ? "" : "s"}
           </p>
         </div>
-        <Button render={<Link href="/admin/productos/nuevo" />} className="gap-1.5">
-          <Plus className="size-4" /> Nuevo producto
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="gap-1.5" render={<a href="/admin/productos/export" download />}>
+            <Download className="size-4" /> Exportar CSV
+          </Button>
+          <Button variant="outline" className="gap-1.5" render={<Link href="/admin/productos/importar" />}>
+            <FileUp className="size-4" /> Importar
+          </Button>
+          <Button render={<Link href="/admin/productos/nuevo" />} className="gap-1.5">
+            <Plus className="size-4" /> Nuevo producto
+          </Button>
+        </div>
       </div>
 
       <ProductsFilters brands={brands} categories={categories} />
