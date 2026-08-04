@@ -142,6 +142,9 @@ export function ProductForm({
   async function onSubmit(values: FormState) {
     const fd = new FormData();
     Object.entries(values).forEach(([key, value]) => {
+      // No mandar campos vacíos/undefined: FormData los guardaría como el texto
+      // "undefined" y el servidor no podría convertirlos a número (NaN).
+      if (value === undefined || value === null) return;
       fd.append(key, typeof value === "boolean" ? String(value) : value);
     });
 

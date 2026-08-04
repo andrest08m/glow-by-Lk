@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-const emptyToUndefined = (val: unknown) => (val === "" || val === null ? undefined : val);
+const emptyToUndefined = (val: unknown) => {
+  if (val === "" || val === null || val === undefined) return undefined;
+  if (typeof val === "string") {
+    const t = val.trim();
+    // FormData puede mandar estos textos para campos opcionales vacíos
+    if (t === "" || t === "undefined" || t === "null" || t === "NaN") return undefined;
+    return t;
+  }
+  if (typeof val === "number" && Number.isNaN(val)) return undefined;
+  return val;
+};
 
 const optionalPositiveNumber = z.preprocess(
   emptyToUndefined,
