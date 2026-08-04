@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 
 export const DEFAULT_SETTINGS = {
   whatsapp_number: "573000000000",
@@ -16,8 +16,9 @@ export const SETTING_LABELS: Record<SettingKey, string> = {
 };
 
 export const getSiteSettings = cache(async (): Promise<Record<SettingKey, string>> => {
-  const rows = await prisma.siteSetting.findMany();
-  const map = new Map(rows.map((r) => [r.clave, r.valor]));
+  const supabase = await createClient();
+  const { data } = await supabase.from("site_settings").select("clave,valor");
+  const map = new Map((data ?? []).map((r) => [r.clave, r.valor]));
 
   const keys = Object.keys(DEFAULT_SETTINGS) as SettingKey[];
   return Object.fromEntries(

@@ -1,4 +1,4 @@
-import { ProductStatus } from "@/generated/prisma/client";
+import { ProductStatus } from "@/lib/supabase/database.types";
 
 export function computeEstado(cantidad: number, stockMinimo: number): ProductStatus {
   if (cantidad <= 0) return "AGOTADO";

@@ -13,3 +13,7 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// Habilita el acceso a los bindings de Cloudflare durante `next dev` (igual que Alerta Violeta).
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+initOpenNextCloudflareForDev();

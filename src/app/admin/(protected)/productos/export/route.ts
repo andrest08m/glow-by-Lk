@@ -1,39 +1,41 @@
-import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { toCsv, PRODUCT_CSV_HEADERS } from "@/lib/csv";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return new Response("No autorizado", { status: 401 });
+  const auth = await createClient();
+  const {
+    data: { user },
+  } = await auth.auth.getUser();
+  if (!user) return new Response("No autorizado", { status: 401 });
 
-  const products = await prisma.product.findMany({
-    include: {
-      brand: { select: { nombre: true } },
-      category: { select: { nombre: true } },
-      subcategory: { select: { nombre: true } },
-    },
-    orderBy: { orden: "asc" },
-  });
+  const db = createAdminClient();
+  const { data: products } = await db
+    .from("products")
+    .select(
+      "*,brand:brands(nombre),category:categories(nombre),subcategory:subcategories(nombre)"
+    )
+    .order("orden", { ascending: true });
 
   const boolCsv = (v: boolean) => (v ? "si" : "no");
 
-  const rows = products.map((p) => [
+  const rows = (products ?? []).map((p) => [
     p.nombre,
     p.sku ?? "",
-    p.codigoInterno ?? "",
+    p.codigo_interno ?? "",
     Number(p.precio),
-    p.precioOferta ? Number(p.precioOferta) : "",
-    p.costo ? Number(p.costo) : "",
+    p.precio_oferta != null ? Number(p.precio_oferta) : "",
+    p.costo != null ? Number(p.costo) : "",
     p.cantidad,
-    p.stockMinimo,
-    p.brand?.nombre ?? "",
-    p.category?.nombre ?? "",
-    p.subcategory?.nombre ?? "",
-    p.descripcionCorta ?? "",
-    p.descripcionLarga ?? "",
+    p.stock_minimo,
+    (p.brand as { nombre: string } | null)?.nombre ?? "",
+    (p.category as { nombre: string } | null)?.nombre ?? "",
+    (p.subcategory as { nombre: string } | null)?.nombre ?? "",
+    p.descripcion_corta ?? "",
+    p.descripcion_larga ?? "",
     boolCsv(p.destacado),
     boolCsv(p.nuevo),
-    boolCsv(p.masVendido),
+    boolCsv(p.mas_vendido),
     boolCsv(p.activo),
   ]);
 

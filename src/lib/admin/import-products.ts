@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { computeEstado } from "@/lib/product-status";
 import { toSlug, uniqueSlug } from "@/lib/slug";
 
@@ -55,9 +55,17 @@ export type ImportPreview = {
 };
 
 type ParsedRow = z.output<typeof rowSchema>;
+type AdminDb = ReturnType<typeof createAdminClient>;
 
-async function planRows(rows: ImportRow[]) {
-  const parsed: { fila: number; data?: ParsedRow; error?: string }[] = rows.map((raw, i) => {
+type Planned = {
+  fila: number;
+  data?: ParsedRow;
+  targetId?: string;
+  plan: RowPlan;
+};
+
+async function planRows(db: AdminDb, rows: ImportRow[]): Promise<Planned[]> {
+  const parsed = rows.map((raw, i) => {
     const result = rowSchema.safeParse(raw);
     if (!result.success) {
       const issue = result.error.issues[0];
@@ -69,22 +77,25 @@ async function planRows(rows: ImportRow[]) {
   const skus = parsed.flatMap((p) => (p.data?.sku ? [p.data.sku] : []));
   const codigos = parsed.flatMap((p) => (p.data?.codigoInterno ? [p.data.codigoInterno] : []));
 
-  const existentes = await prisma.product.findMany({
-    where: {
-      OR: [
-        ...(skus.length ? [{ sku: { in: skus } }] : []),
-        ...(codigos.length ? [{ codigoInterno: { in: codigos } }] : []),
-      ],
-    },
-    select: { id: true, sku: true, codigoInterno: true },
-  });
+  const existentes: { id: string; sku: string | null; codigo_interno: string | null }[] = [];
+  if (skus.length) {
+    const { data } = await db.from("products").select("id,sku,codigo_interno").in("sku", skus);
+    existentes.push(...(data ?? []));
+  }
+  if (codigos.length) {
+    const { data } = await db.from("products").select("id,sku,codigo_interno").in("codigo_interno", codigos);
+    for (const row of data ?? []) if (!existentes.some((e) => e.id === row.id)) existentes.push(row);
+  }
 
   const porSku = new Map(existentes.filter((p) => p.sku).map((p) => [p.sku!, p.id]));
-  const porCodigo = new Map(existentes.filter((p) => p.codigoInterno).map((p) => [p.codigoInterno!, p.id]));
+  const porCodigo = new Map(existentes.filter((p) => p.codigo_interno).map((p) => [p.codigo_interno!, p.id]));
 
   return parsed.map((p) => {
     if (!p.data) {
-      return { fila: p.fila, plan: { fila: p.fila, accion: "error" as const, nombre: rows[p.fila - 2]?.nombre ?? "", error: p.error } };
+      return {
+        fila: p.fila,
+        plan: { fila: p.fila, accion: "error" as const, nombre: rows[p.fila - 2]?.nombre ?? "", error: p.error },
+      };
     }
     const matchSku = p.data.sku ? porSku.get(p.data.sku) : undefined;
     const matchCodigo = p.data.codigoInterno ? porCodigo.get(p.data.codigoInterno) : undefined;
@@ -104,7 +115,8 @@ async function planRows(rows: ImportRow[]) {
 }
 
 export async function previewImport(rows: ImportRow[]): Promise<ImportPreview> {
-  const planned = await planRows(rows);
+  const db = createAdminClient();
+  const planned = await planRows(db, rows);
   const filas = planned.map((p) => p.plan);
   return {
     crear: filas.filter((f) => f.accion === "crear").length,
@@ -115,129 +127,134 @@ export async function previewImport(rows: ImportRow[]): Promise<ImportPreview> {
 }
 
 export async function applyImport(rows: ImportRow[]) {
-  const planned = await planRows(rows);
+  const db = createAdminClient();
+  const planned = await planRows(db, rows);
   const validas = planned.filter((p) => p.data);
+
+  const brandCache = new Map<string, string>();
+  const categoryCache = new Map<string, string>();
+  const subcategoryCache = new Map<string, string>();
+
+  async function resolveTaxonomy(
+    table: "brands" | "categories",
+    cache: Map<string, string>,
+    nombre: string
+  ) {
+    const key = nombre.toLowerCase();
+    if (cache.has(key)) return cache.get(key)!;
+    const { data: found } = await db.from(table).select("id").ilike("nombre", nombre).limit(1);
+    let id = found?.[0]?.id;
+    if (!id) {
+      const { data: max } = await db.from(table).select("orden").order("orden", { ascending: false }).limit(1);
+      const { data: created } = await db
+        .from(table)
+        .insert({ nombre, slug: toSlug(nombre), orden: (max?.[0]?.orden ?? 0) + 1 })
+        .select("id")
+        .single();
+      id = created!.id;
+    }
+    cache.set(key, id);
+    return id;
+  }
+
+  async function resolveSubcategory(categoryId: string, nombre: string) {
+    const key = `${categoryId}:${nombre.toLowerCase()}`;
+    if (subcategoryCache.has(key)) return subcategoryCache.get(key)!;
+    const { data: found } = await db
+      .from("subcategories")
+      .select("id")
+      .eq("category_id", categoryId)
+      .ilike("nombre", nombre)
+      .limit(1);
+    let id = found?.[0]?.id;
+    if (!id) {
+      const { data: max } = await db
+        .from("subcategories")
+        .select("orden")
+        .eq("category_id", categoryId)
+        .order("orden", { ascending: false })
+        .limit(1);
+      const { data: created } = await db
+        .from("subcategories")
+        .insert({ category_id: categoryId, nombre, slug: toSlug(nombre), orden: (max?.[0]?.orden ?? 0) + 1 })
+        .select("id")
+        .single();
+      id = created!.id;
+    }
+    subcategoryCache.set(key, id);
+    return id;
+  }
+
+  async function slugExists(slug: string) {
+    const { data } = await db.from("products").select("id").eq("slug", slug).limit(1);
+    return (data?.length ?? 0) > 0;
+  }
 
   let creados = 0;
   let actualizados = 0;
 
-  await prisma.$transaction(
-    async (tx) => {
-      const brandCache = new Map<string, string>();
-      const categoryCache = new Map<string, string>();
-      const subcategoryCache = new Map<string, string>();
+  for (const item of validas) {
+    const data = item.data!;
+    const brandId = data.marca ? await resolveTaxonomy("brands", brandCache, data.marca) : null;
+    const categoryId = data.categoria ? await resolveTaxonomy("categories", categoryCache, data.categoria) : null;
+    const subcategoryId =
+      categoryId && data.subcategoria ? await resolveSubcategory(categoryId, data.subcategoria) : null;
 
-      async function resolveBrand(nombre: string) {
-        const key = nombre.toLowerCase();
-        if (brandCache.has(key)) return brandCache.get(key)!;
-        let brand = await tx.brand.findFirst({ where: { nombre: { equals: nombre, mode: "insensitive" } } });
-        if (!brand) {
-          const max = await tx.brand.aggregate({ _max: { orden: true } });
-          brand = await tx.brand.create({
-            data: { nombre, slug: toSlug(nombre), orden: (max._max.orden ?? 0) + 1 },
-          });
-        }
-        brandCache.set(key, brand.id);
-        return brand.id;
-      }
+    const base = {
+      nombre: data.nombre,
+      sku: data.sku || null,
+      codigo_interno: data.codigoInterno || null,
+      precio: data.precio,
+      precio_oferta: data.precioOferta ?? null,
+      costo: data.costo ?? null,
+      descripcion_corta: data.descripcionCorta || null,
+      descripcion_larga: data.descripcionLarga || null,
+      brand_id: brandId,
+      category_id: categoryId,
+      subcategory_id: subcategoryId,
+    };
 
-      async function resolveCategory(nombre: string) {
-        const key = nombre.toLowerCase();
-        if (categoryCache.has(key)) return categoryCache.get(key)!;
-        let category = await tx.category.findFirst({ where: { nombre: { equals: nombre, mode: "insensitive" } } });
-        if (!category) {
-          const max = await tx.category.aggregate({ _max: { orden: true } });
-          category = await tx.category.create({
-            data: { nombre, slug: toSlug(nombre), orden: (max._max.orden ?? 0) + 1 },
-          });
-        }
-        categoryCache.set(key, category.id);
-        return category.id;
-      }
-
-      async function resolveSubcategory(categoryId: string, nombre: string) {
-        const key = `${categoryId}:${nombre.toLowerCase()}`;
-        if (subcategoryCache.has(key)) return subcategoryCache.get(key)!;
-        let sub = await tx.subcategory.findFirst({
-          where: { categoryId, nombre: { equals: nombre, mode: "insensitive" } },
-        });
-        if (!sub) {
-          const max = await tx.subcategory.aggregate({ where: { categoryId }, _max: { orden: true } });
-          sub = await tx.subcategory.create({
-            data: { categoryId, nombre, slug: toSlug(nombre), orden: (max._max.orden ?? 0) + 1 },
-          });
-        }
-        subcategoryCache.set(key, sub.id);
-        return sub.id;
-      }
-
-      for (const item of validas) {
-        const data = item.data!;
-        const brandId = data.marca ? await resolveBrand(data.marca) : null;
-        const categoryId = data.categoria ? await resolveCategory(data.categoria) : null;
-        const subcategoryId =
-          categoryId && data.subcategoria ? await resolveSubcategory(categoryId, data.subcategoria) : null;
-
-        const base = {
-          nombre: data.nombre,
-          sku: data.sku || null,
-          codigoInterno: data.codigoInterno || null,
-          precio: data.precio,
-          precioOferta: data.precioOferta ?? null,
-          costo: data.costo ?? null,
-          descripcionCorta: data.descripcionCorta || null,
-          descripcionLarga: data.descripcionLarga || null,
-          brandId,
-          categoryId,
-          subcategoryId,
-        };
-
-        if (item.targetId) {
-          const existing = await tx.product.findUniqueOrThrow({
-            where: { id: item.targetId },
-            select: { cantidad: true, stockMinimo: true },
-          });
-          const cantidad = data.cantidad ?? existing.cantidad;
-          const stockMinimo = data.stockMinimo ?? existing.stockMinimo;
-          await tx.product.update({
-            where: { id: item.targetId },
-            data: {
-              ...base,
-              cantidad,
-              stockMinimo,
-              estado: computeEstado(cantidad, stockMinimo),
-              ...(data.destacado !== undefined ? { destacado: data.destacado } : {}),
-              ...(data.nuevo !== undefined ? { nuevo: data.nuevo } : {}),
-              ...(data.masVendido !== undefined ? { masVendido: data.masVendido } : {}),
-              ...(data.activo !== undefined ? { activo: data.activo } : {}),
-            },
-          });
-          actualizados++;
-        } else {
-          const cantidad = data.cantidad ?? 0;
-          const stockMinimo = data.stockMinimo ?? 5;
-          const slug = await uniqueSlug(data.nombre, (s) =>
-            tx.product.findUnique({ where: { slug: s } }).then(Boolean)
-          );
-          await tx.product.create({
-            data: {
-              ...base,
-              slug,
-              cantidad,
-              stockMinimo,
-              estado: computeEstado(cantidad, stockMinimo),
-              destacado: data.destacado ?? false,
-              nuevo: data.nuevo ?? false,
-              masVendido: data.masVendido ?? false,
-              activo: data.activo ?? true,
-            },
-          });
-          creados++;
-        }
-      }
-    },
-    { timeout: 120000 }
-  );
+    if (item.targetId) {
+      const { data: existing } = await db
+        .from("products")
+        .select("cantidad,stock_minimo")
+        .eq("id", item.targetId)
+        .single();
+      const cantidad = data.cantidad ?? existing?.cantidad ?? 0;
+      const stockMinimo = data.stockMinimo ?? existing?.stock_minimo ?? 5;
+      await db
+        .from("products")
+        .update({
+          ...base,
+          cantidad,
+          stock_minimo: stockMinimo,
+          estado: computeEstado(cantidad, stockMinimo),
+          ...(data.destacado !== undefined ? { destacado: data.destacado } : {}),
+          ...(data.nuevo !== undefined ? { nuevo: data.nuevo } : {}),
+          ...(data.masVendido !== undefined ? { mas_vendido: data.masVendido } : {}),
+          ...(data.activo !== undefined ? { activo: data.activo } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", item.targetId);
+      actualizados++;
+    } else {
+      const cantidad = data.cantidad ?? 0;
+      const stockMinimo = data.stockMinimo ?? 5;
+      const slug = await uniqueSlug(data.nombre, slugExists);
+      await db.from("products").insert({
+        ...base,
+        slug,
+        cantidad,
+        stock_minimo: stockMinimo,
+        estado: computeEstado(cantidad, stockMinimo),
+        destacado: data.destacado ?? false,
+        nuevo: data.nuevo ?? false,
+        mas_vendido: data.masVendido ?? false,
+        activo: data.activo ?? true,
+      });
+      creados++;
+    }
+  }
 
   return { creados, actualizados, omitidos: planned.length - validas.length };
 }

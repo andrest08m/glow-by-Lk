@@ -7,12 +7,12 @@ import { EmptyState } from "@/components/site/empty-state";
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { SearchBox } from "@/components/admin/search-box";
 import { OrderStatusBadge } from "@/components/admin/orders/order-status-badge";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { formatCOP, formatFecha } from "@/lib/format";
 import { ORDER_STATUS_LABEL } from "@/lib/orders";
 import { cn } from "@/lib/utils";
-import type { Prisma, OrderStatus } from "@/generated/prisma/client";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Pedidos" };
 
@@ -39,26 +39,50 @@ export default async function AdminOrdersPage({
 
   const q = sp.q?.trim();
   const numeroBuscado = q && /^\d+$/.test(q) ? Number(q) : undefined;
+  const db = createAdminClient();
+  const from = (page - 1) * PAGE_SIZE;
 
-  const where: Prisma.OrderWhereInput = {
-    ...(estado ? { estado } : {}),
-    ...(q
-      ? numeroBuscado !== undefined
-        ? { OR: [{ numero: numeroBuscado }, { clienteNombre: { contains: q, mode: "insensitive" } }] }
-        : { clienteNombre: { contains: q, mode: "insensitive" } }
-      : {}),
-  };
+  let query = db
+    .from("orders")
+    .select("id,numero,cliente_nombre,cliente_telefono,total,estado,created_at,order_items(id)", {
+      count: "exact",
+    });
+  if (estado) query = query.eq("estado", estado);
+  if (q) {
+    query =
+      numeroBuscado !== undefined
+        ? query.or(`numero.eq.${numeroBuscado},cliente_nombre.ilike.%${q}%`)
+        : query.ilike("cliente_nombre", `%${q}%`);
+  }
 
-  const [orders, total] = await Promise.all([
-    prisma.order.findMany({
-      where,
-      include: { _count: { select: { items: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.order.count({ where }),
-  ]);
+  const { data, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
+
+  const total = count ?? 0;
+  const orders = (
+    (data as
+      | {
+          id: string;
+          numero: number;
+          cliente_nombre: string;
+          cliente_telefono: string;
+          total: number;
+          estado: OrderStatus;
+          created_at: string;
+          order_items: { id: string }[] | null;
+        }[]
+      | null) ?? []
+  ).map((o) => ({
+    id: o.id,
+    numero: o.numero,
+    clienteNombre: o.cliente_nombre,
+    clienteTelefono: o.cliente_telefono,
+    total: Number(o.total),
+    estado: o.estado,
+    createdAt: new Date(o.created_at),
+    _count: { items: o.order_items?.length ?? 0 },
+  }));
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

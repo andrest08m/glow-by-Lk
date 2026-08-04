@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ORDER_TRANSITIONS, ORDER_STATUS_LABEL } from "@/lib/orders";
 import { changeOrderStatusAction } from "@/app/admin/(protected)/pedidos/actions";
-import type { OrderStatus } from "@/generated/prisma/client";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 const NEXT_LABEL: Partial<Record<OrderStatus, { label: string; icon: typeof CheckCircle2 }>> = {
   CONFIRMADO: { label: "Confirmar pedido", icon: CheckCircle2 },

@@ -1,5 +1,5 @@
 import "server-only";
-import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase-admin";
+import { createAdminClient, getStorageBucket } from "@/lib/supabase/admin";
 
 function extensionFromFile(file: File) {
   const fromName = file.name.split(".").pop();
@@ -9,24 +9,27 @@ function extensionFromFile(file: File) {
 
 /** Sube un archivo a Supabase Storage dentro de una carpeta y devuelve la URL pública. */
 export async function uploadImage(file: File, folder: string) {
+  const supabase = createAdminClient();
+  const bucket = getStorageBucket();
   const ext = extensionFromFile(file);
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
 
-  const { error } = await supabaseAdmin.storage
-    .from(STORAGE_BUCKET)
+  const { error } = await supabase.storage
+    .from(bucket)
     .upload(path, file, { contentType: file.type, upsert: false });
 
   if (error) throw new Error(`Error subiendo imagen: ${error.message}`);
 
-  const { data } = supabaseAdmin.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
 
 /** Elimina una imagen de Supabase Storage a partir de su URL pública. */
 export async function deleteImageByUrl(url: string) {
-  const marker = `/object/public/${STORAGE_BUCKET}/`;
+  const bucket = getStorageBucket();
+  const marker = `/object/public/${bucket}/`;
   const idx = url.indexOf(marker);
   if (idx === -1) return;
   const path = url.slice(idx + marker.length);
-  await supabaseAdmin.storage.from(STORAGE_BUCKET).remove([path]);
+  await createAdminClient().storage.from(bucket).remove([path]);
 }

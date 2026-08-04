@@ -9,9 +9,9 @@ import { EmptyState } from "@/components/site/empty-state";
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { MovementDialog } from "@/components/admin/inventory/movement-dialog";
 import { SearchBox } from "@/components/admin/search-box";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { cn } from "@/lib/utils";
-import type { Prisma, ProductStatus } from "@/generated/prisma/client";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Inventario" };
 
@@ -19,6 +19,17 @@ type SearchParams = { q?: string; estado?: string; page?: string };
 
 const ESTADOS: ProductStatus[] = ["DISPONIBLE", "POCO_STOCK", "AGOTADO"];
 const PAGE_SIZE = 20;
+
+type InvRow = {
+  id: string;
+  nombre: string;
+  cantidad: number;
+  stockMinimo: number;
+  estado: ProductStatus;
+  activo: boolean;
+  brand: { nombre: string } | null;
+  images: { url: string }[];
+};
 
 export default async function AdminInventoryPage({
   searchParams,
@@ -28,37 +39,52 @@ export default async function AdminInventoryPage({
   const sp = await searchParams;
   const estado = ESTADOS.includes(sp.estado as ProductStatus) ? (sp.estado as ProductStatus) : undefined;
   const page = sp.page ? Math.max(1, Number(sp.page)) : 1;
+  const db = createAdminClient();
 
-  const where: Prisma.ProductWhereInput = {
-    ...(sp.q ? { nombre: { contains: sp.q, mode: "insensitive" } } : {}),
-    ...(estado ? { estado } : {}),
-  };
+  let listQuery = db
+    .from("products")
+    .select("id,nombre,cantidad,stock_minimo,estado,activo,brand:brands(nombre),images:product_images(url,orden)", {
+      count: "exact",
+    });
+  if (sp.q) listQuery = listQuery.ilike("nombre", `%${sp.q}%`);
+  if (estado) listQuery = listQuery.eq("estado", estado);
+  const from = (page - 1) * PAGE_SIZE;
 
-  const [items, total, pocoStock, agotados, allProducts] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      select: {
-        id: true,
-        nombre: true,
-        cantidad: true,
-        stockMinimo: true,
-        estado: true,
-        activo: true,
-        brand: { select: { nombre: true } },
-        images: { orderBy: { orden: "asc" }, take: 1, select: { url: true } },
-      },
-      orderBy: [{ cantidad: "asc" }, { nombre: "asc" }],
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.product.count({ where }),
-    prisma.product.count({ where: { estado: "POCO_STOCK" } }),
-    prisma.product.count({ where: { estado: "AGOTADO" } }),
-    prisma.product.findMany({
-      select: { id: true, nombre: true, cantidad: true },
-      orderBy: { nombre: "asc" },
-    }),
+  const [listRes, pocoRes, agotRes, allRes] = await Promise.all([
+    listQuery.order("cantidad", { ascending: true }).order("nombre", { ascending: true }).range(from, from + PAGE_SIZE - 1),
+    db.from("products").select("id", { count: "exact", head: true }).eq("estado", "POCO_STOCK"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("estado", "AGOTADO"),
+    db.from("products").select("id,nombre,cantidad").order("nombre", { ascending: true }),
   ]);
+
+  const total = listRes.count ?? 0;
+  const pocoStock = pocoRes.count ?? 0;
+  const agotados = agotRes.count ?? 0;
+  const allProducts = allRes.data ?? [];
+
+  const items: InvRow[] = (
+    (listRes.data as
+      | {
+          id: string;
+          nombre: string;
+          cantidad: number;
+          stock_minimo: number;
+          estado: ProductStatus;
+          activo: boolean;
+          brand: { nombre: string } | null;
+          images: { url: string; orden: number }[] | null;
+        }[]
+      | null) ?? []
+  ).map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    cantidad: p.cantidad,
+    stockMinimo: p.stock_minimo,
+    estado: p.estado,
+    activo: p.activo,
+    brand: p.brand,
+    images: [...(p.images ?? [])].sort((a, b) => a.orden - b.orden).slice(0, 1).map((i) => ({ url: i.url })),
+  }));
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

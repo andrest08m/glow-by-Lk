@@ -1,20 +1,36 @@
-import { Prisma } from "@/generated/prisma/client";
-import type { ProductStatus } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { computeDescuentoPct } from "@/lib/product-status";
 import type { ProductCardDTO, ProductDetailDTO } from "@/types/product";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
-const cardInclude = {
-  images: { orderBy: { orden: "asc" as const }, take: 1 },
-  brand: { select: { nombre: true, slug: true } },
-  category: { select: { nombre: true, slug: true } },
-} satisfies Prisma.ProductInclude;
+// Selección para tarjetas: producto + imágenes + marca + categoría (embeds por FK).
+const CARD_SELECT =
+  "id,nombre,slug,precio,precio_oferta,estado,destacado,nuevo,mas_vendido," +
+  "images:product_images(url,orden),brand:brands(nombre,slug),category:categories(nombre,slug)";
 
-type ProductCardRow = Prisma.ProductGetPayload<{ include: typeof cardInclude }>;
+type CardRow = {
+  id: string;
+  nombre: string;
+  slug: string;
+  precio: number;
+  precio_oferta: number | null;
+  estado: ProductStatus;
+  destacado: boolean;
+  nuevo: boolean;
+  mas_vendido: boolean;
+  images: { url: string; orden: number }[] | null;
+  brand: { nombre: string; slug: string } | null;
+  category: { nombre: string; slug: string } | null;
+};
 
-function serializeCard(p: ProductCardRow): ProductCardDTO {
+function mainImage(images: { url: string; orden: number }[] | null) {
+  if (!images || images.length === 0) return null;
+  return [...images].sort((a, b) => a.orden - b.orden)[0].url;
+}
+
+function serializeCard(p: CardRow): ProductCardDTO {
   const precio = Number(p.precio);
-  const precioOferta = p.precioOferta ? Number(p.precioOferta) : null;
+  const precioOferta = p.precio_oferta != null ? Number(p.precio_oferta) : null;
   return {
     id: p.id,
     nombre: p.nombre,
@@ -25,57 +41,75 @@ function serializeCard(p: ProductCardRow): ProductCardDTO {
     estado: p.estado,
     destacado: p.destacado,
     nuevo: p.nuevo,
-    masVendido: p.masVendido,
-    imagenPrincipal: p.images[0]?.url ?? null,
+    masVendido: p.mas_vendido,
+    imagenPrincipal: mainImage(p.images),
     marca: p.brand ? { nombre: p.brand.nombre, slug: p.brand.slug } : null,
     categoria: p.category ? { nombre: p.category.nombre, slug: p.category.slug } : null,
   };
 }
 
-export async function getFeaturedProducts(limit = 8) {
-  const rows = await prisma.product.findMany({
-    where: { activo: true, destacado: true },
-    include: cardInclude,
-    orderBy: { orden: "asc" },
-    take: limit,
-  });
-  return rows.map(serializeCard);
+export async function getFeaturedProducts(limit = 8): Promise<ProductCardDTO[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select(CARD_SELECT)
+    .eq("activo", true)
+    .eq("destacado", true)
+    .order("orden", { ascending: true })
+    .limit(limit);
+  return ((data as CardRow[] | null) ?? []).map(serializeCard);
 }
 
-export async function getNewProducts(limit = 8) {
-  const rows = await prisma.product.findMany({
-    where: { activo: true, nuevo: true },
-    include: cardInclude,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-  return rows.map(serializeCard);
+export async function getNewProducts(limit = 8): Promise<ProductCardDTO[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select(CARD_SELECT)
+    .eq("activo", true)
+    .eq("nuevo", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data as CardRow[] | null) ?? []).map(serializeCard);
 }
 
-export async function getBestSellers(limit = 8) {
-  const rows = await prisma.product.findMany({
-    where: { activo: true, masVendido: true },
-    include: cardInclude,
-    orderBy: { orden: "asc" },
-    take: limit,
-  });
-  return rows.map(serializeCard);
+export async function getBestSellers(limit = 8): Promise<ProductCardDTO[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select(CARD_SELECT)
+    .eq("activo", true)
+    .eq("mas_vendido", true)
+    .order("orden", { ascending: true })
+    .limit(limit);
+  return ((data as CardRow[] | null) ?? []).map(serializeCard);
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductDetailDTO | null> {
-  const p = await prisma.product.findUnique({
-    where: { slug },
-    include: {
-      images: { orderBy: { orden: "asc" } },
-      brand: { select: { nombre: true, slug: true } },
-      category: { select: { nombre: true, slug: true } },
-      subcategory: { select: { nombre: true, slug: true } },
-    },
-  });
-  if (!p || !p.activo) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select(
+      "*,images:product_images(id,url,alt,orden)," +
+        "brand:brands(nombre,slug),category:categories(nombre,slug),subcategory:subcategories(nombre,slug)"
+    )
+    .eq("slug", slug)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (!data) return null;
+  const p = data as unknown as CardRow & {
+    codigo_interno: string | null;
+    sku: string | null;
+    descripcion_corta: string | null;
+    descripcion_larga: string | null;
+    cantidad: number;
+    images: { id: string; url: string; alt: string | null; orden: number }[] | null;
+    subcategory: { nombre: string; slug: string } | null;
+  };
 
   const precio = Number(p.precio);
-  const precioOferta = p.precioOferta ? Number(p.precioOferta) : null;
+  const precioOferta = p.precio_oferta != null ? Number(p.precio_oferta) : null;
+  const images = [...(p.images ?? [])].sort((a, b) => a.orden - b.orden);
 
   return {
     id: p.id,
@@ -87,16 +121,16 @@ export async function getProductBySlug(slug: string): Promise<ProductDetailDTO |
     estado: p.estado,
     destacado: p.destacado,
     nuevo: p.nuevo,
-    masVendido: p.masVendido,
-    imagenPrincipal: p.images[0]?.url ?? null,
+    masVendido: p.mas_vendido,
+    imagenPrincipal: images[0]?.url ?? null,
     marca: p.brand ? { nombre: p.brand.nombre, slug: p.brand.slug } : null,
     categoria: p.category ? { nombre: p.category.nombre, slug: p.category.slug } : null,
-    codigoInterno: p.codigoInterno,
+    codigoInterno: p.codigo_interno,
     sku: p.sku,
-    descripcionCorta: p.descripcionCorta,
-    descripcionLarga: p.descripcionLarga,
+    descripcionCorta: p.descripcion_corta,
+    descripcionLarga: p.descripcion_larga,
     cantidad: p.cantidad,
-    images: p.images.map((img) => ({ id: img.id, url: img.url, alt: img.alt, orden: img.orden })),
+    images: images.map((img) => ({ id: img.id, url: img.url, alt: img.alt, orden: img.orden })),
     subcategoria: p.subcategory ? { nombre: p.subcategory.nombre, slug: p.subcategory.slug } : null,
   };
 }
@@ -114,36 +148,40 @@ export type ProductFilters = {
 
 export async function searchProducts(filters: ProductFilters) {
   const { q, marca, categoria, precioMin, precioMax, disponibilidad, page = 1, pageSize = 24 } = filters;
+  const supabase = await createClient();
 
-  const where: Prisma.ProductWhereInput = {
-    activo: true,
-    ...(q ? { nombre: { contains: q, mode: "insensitive" } } : {}),
-    ...(marca ? { brand: { slug: marca } } : {}),
-    ...(categoria ? { category: { slug: categoria } } : {}),
-    ...(disponibilidad ? { estado: disponibilidad } : {}),
-    ...(precioMin !== undefined || precioMax !== undefined
-      ? {
-          precio: {
-            ...(precioMin !== undefined ? { gte: precioMin } : {}),
-            ...(precioMax !== undefined ? { lte: precioMax } : {}),
-          },
-        }
-      : {}),
-  };
+  // Resolver slugs de marca/categoría a ids (filtro simple y confiable).
+  let brandId: string | undefined;
+  let categoryId: string | undefined;
+  if (marca) {
+    const { data } = await supabase.from("brands").select("id").eq("slug", marca).maybeSingle();
+    brandId = data?.id ?? "__none__";
+  }
+  if (categoria) {
+    const { data } = await supabase.from("categories").select("id").eq("slug", categoria).maybeSingle();
+    categoryId = data?.id ?? "__none__";
+  }
 
-  const [rows, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      include: cardInclude,
-      orderBy: { orden: "asc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.product.count({ where }),
-  ]);
+  let query = supabase
+    .from("products")
+    .select(CARD_SELECT, { count: "exact" })
+    .eq("activo", true);
 
+  if (q) query = query.ilike("nombre", `%${q}%`);
+  if (brandId) query = query.eq("brand_id", brandId);
+  if (categoryId) query = query.eq("category_id", categoryId);
+  if (disponibilidad) query = query.eq("estado", disponibilidad);
+  if (precioMin !== undefined) query = query.gte("precio", precioMin);
+  if (precioMax !== undefined) query = query.lte("precio", precioMax);
+
+  const from = (page - 1) * pageSize;
+  const { data, count } = await query
+    .order("orden", { ascending: true })
+    .range(from, from + pageSize - 1);
+
+  const total = count ?? 0;
   return {
-    items: rows.map(serializeCard),
+    items: ((data as CardRow[] | null) ?? []).map(serializeCard),
     total,
     page,
     pageSize,
@@ -152,9 +190,19 @@ export async function searchProducts(filters: ProductFilters) {
 }
 
 export async function getCategoriesWithImage() {
-  return prisma.category.findMany({ orderBy: { orden: "asc" } });
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("categories")
+    .select("id,nombre,slug,imagen,orden")
+    .order("orden", { ascending: true });
+  return data ?? [];
 }
 
 export async function getBrands() {
-  return prisma.brand.findMany({ orderBy: { orden: "asc" } });
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("brands")
+    .select("id,nombre,slug,imagen,orden")
+    .order("orden", { ascending: true });
+  return data ?? [];
 }

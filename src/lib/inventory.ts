@@ -1,7 +1,5 @@
-import type { MovementType, Prisma } from "@/generated/prisma/client";
-import { computeEstado } from "@/lib/product-status";
-
-export type TxClient = Prisma.TransactionClient;
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, MovementType } from "@/lib/supabase/database.types";
 
 export class StockInsuficienteError extends Error {
   constructor(
@@ -16,81 +14,48 @@ export class StockInsuficienteError extends Error {
   }
 }
 
+/** Traduce el mensaje de error de las funciones RPC a un Error tipado y legible. */
+export function mapRpcError(message: string | undefined): Error {
+  const msg = message ?? "Error desconocido";
+  if (msg.includes("STOCK_INSUFICIENTE")) {
+    // formato: STOCK_INSUFICIENTE|<nombre>|<disponible>|<solicitado>
+    const raw = msg.slice(msg.indexOf("STOCK_INSUFICIENTE"));
+    const [, nombre, disp, sol] = raw.split("|");
+    return new StockInsuficienteError(nombre ?? "producto", Number(disp) || 0, Number(sol) || 0);
+  }
+  if (msg.includes("TRANSICION_INVALIDA")) {
+    return new Error("Esa transición de estado no está permitida para este pedido.");
+  }
+  if (msg.includes("CANTIDAD_INVALIDA")) return new Error("La cantidad no es válida.");
+  if (msg.includes("PRODUCTO_NO_EXISTE")) return new Error("El producto ya no existe.");
+  if (msg.includes("CLIENTE_NO_EXISTE")) return new Error("El cliente no existe.");
+  if (msg.includes("SIN_CLIENTE")) return new Error("Elige un cliente o crea uno nuevo.");
+  return new Error(msg);
+}
+
 export type MovimientoInput = {
   productId: string;
   tipo: MovementType;
-  /** ENTRADA/SALIDA: unidades (positivo). AJUSTE: cantidad final exacta tras conteo físico. */
+  /** ENTRADA/SALIDA: unidades (>0). AJUSTE: cantidad final tras conteo. */
   cantidad: number;
   motivo?: string | null;
   adminEmail?: string | null;
   orderId?: string | null;
 };
 
-/**
- * Registra un movimiento de inventario y actualiza Product.cantidad + estado.
- * SIEMPRE debe llamarse dentro de prisma.$transaction — recibe el cliente
- * transaccional para que pedidos pueda componer N movimientos atómicos.
- *
- * La SALIDA usa una guarda atómica (update condicional cantidad >= n): si dos
- * ventas simultáneas compiten por el mismo stock, una de las dos falla con
- * StockInsuficienteError y su transacción completa se revierte.
- */
-export async function registrarMovimiento(tx: TxClient, input: MovimientoInput) {
-  const { productId, tipo, cantidad, motivo, adminEmail, orderId } = input;
-
-  if (!Number.isInteger(cantidad)) throw new Error("La cantidad debe ser un número entero.");
-  if (tipo !== "AJUSTE" && cantidad <= 0) throw new Error("La cantidad debe ser mayor a 0.");
-  if (tipo === "AJUSTE" && cantidad < 0) throw new Error("La cantidad final no puede ser negativa.");
-
-  let delta: number;
-
-  if (tipo === "ENTRADA") {
-    await tx.product.update({
-      where: { id: productId },
-      data: { cantidad: { increment: cantidad } },
-    });
-    delta = cantidad;
-  } else if (tipo === "SALIDA") {
-    const updated = await tx.product.updateMany({
-      where: { id: productId, cantidad: { gte: cantidad } },
-      data: { cantidad: { decrement: cantidad } },
-    });
-    if (updated.count === 0) {
-      const p = await tx.product.findUniqueOrThrow({
-        where: { id: productId },
-        select: { nombre: true, cantidad: true },
-      });
-      throw new StockInsuficienteError(p.nombre, p.cantidad, cantidad);
-    }
-    delta = -cantidad;
-  } else {
-    // AJUSTE: fija la cantidad exacta (conteo físico); el kardex guarda el delta con signo
-    const before = await tx.product.findUniqueOrThrow({
-      where: { id: productId },
-      select: { cantidad: true },
-    });
-    delta = cantidad - before.cantidad;
-    await tx.product.update({ where: { id: productId }, data: { cantidad } });
-  }
-
-  const after = await tx.product.findUniqueOrThrow({
-    where: { id: productId },
-    select: { cantidad: true, stockMinimo: true },
+/** Registra un movimiento vía la función RPC atómica registrar_movimiento. */
+export async function registrarMovimiento(
+  supabase: SupabaseClient<Database>,
+  input: MovimientoInput
+) {
+  const { error, data } = await supabase.rpc("registrar_movimiento", {
+    p_product_id: input.productId,
+    p_tipo: input.tipo,
+    p_cantidad: input.cantidad,
+    p_motivo: input.motivo ?? null,
+    p_admin_email: input.adminEmail ?? null,
+    p_order_id: input.orderId ?? null,
   });
-  await tx.product.update({
-    where: { id: productId },
-    data: { estado: computeEstado(after.cantidad, after.stockMinimo) },
-  });
-
-  return tx.inventoryMovement.create({
-    data: {
-      productId,
-      tipo,
-      cantidad: delta,
-      saldoResultante: after.cantidad,
-      motivo: motivo || null,
-      adminEmail: adminEmail || null,
-      orderId: orderId || null,
-    },
-  });
+  if (error) throw mapRpcError(error.message);
+  return data;
 }

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { ESTADO_LABEL } from "@/lib/product-status";
-import type { ProductStatus } from "@/generated/prisma/client";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
 const ESTADO_STYLES: Record<ProductStatus, string> = {
   DISPONIBLE: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",

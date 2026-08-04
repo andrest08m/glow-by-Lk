@@ -1,21 +1,26 @@
 import type { Metadata } from "next";
 import { ProductForm } from "@/components/admin/products/product-form";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Nuevo producto" };
 
 export default async function NewProductPage() {
-  const [brands, categories] = await Promise.all([
-    prisma.brand.findMany({ orderBy: { orden: "asc" }, select: { id: true, nombre: true } }),
-    prisma.category.findMany({
-      orderBy: { orden: "asc" },
-      select: {
-        id: true,
-        nombre: true,
-        subcategories: { orderBy: { orden: "asc" }, select: { id: true, nombre: true } },
-      },
-    }),
+  const db = createAdminClient();
+  const [{ data: brands }, { data: categories }] = await Promise.all([
+    db.from("brands").select("id,nombre").order("orden", { ascending: true }),
+    db
+      .from("categories")
+      .select("id,nombre,subcategories(id,nombre,orden)")
+      .order("orden", { ascending: true }),
   ]);
 
-  return <ProductForm mode="create" brands={brands} categories={categories} />;
+  const categoriesMapped = (categories ?? []).map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    subcategories: [...(c.subcategories ?? [])]
+      .sort((a, b) => a.orden - b.orden)
+      .map((s) => ({ id: s.id, nombre: s.nombre })),
+  }));
+
+  return <ProductForm mode="create" brands={brands ?? []} categories={categoriesMapped} />;
 }

@@ -6,7 +6,7 @@ import { CatalogFilters } from "@/components/product/catalog-filters";
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { EmptyState } from "@/components/site/empty-state";
 import { searchProducts, getBrands, getCategoriesWithImage } from "@/lib/products";
-import type { ProductStatus } from "@/generated/prisma/client";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = {
   title: "Catálogo",

@@ -10,9 +10,10 @@ import { EmptyState } from "@/components/site/empty-state";
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { MovementDialog } from "@/components/admin/inventory/movement-dialog";
 import { MovementTypeBadge } from "@/components/admin/inventory/movement-type-badge";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { formatFecha } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { MovementType, ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Kardex" };
 
@@ -28,30 +29,73 @@ export default async function ProductKardexPage({
   const { id } = await params;
   const sp = await searchParams;
   const page = sp.page ? Math.max(1, Number(sp.page)) : 1;
+  const db = createAdminClient();
+  const from = (page - 1) * PAGE_SIZE;
 
-  const [product, movements, totalMovements] = await Promise.all([
-    prisma.product.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        nombre: true,
-        cantidad: true,
-        stockMinimo: true,
-        estado: true,
-        activo: true,
-        brand: { select: { nombre: true } },
-        images: { orderBy: { orden: "asc" }, take: 1, select: { url: true } },
-      },
-    }),
-    prisma.inventoryMovement.findMany({
-      where: { productId: id },
-      include: { order: { select: { numero: true, id: true } } },
-      orderBy: { fecha: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.inventoryMovement.count({ where: { productId: id } }),
+  const [prodRes, movRes] = await Promise.all([
+    db
+      .from("products")
+      .select("id,nombre,cantidad,stock_minimo,estado,activo,brand:brands(nombre),images:product_images(url,orden)")
+      .eq("id", id)
+      .single(),
+    db
+      .from("inventory_movements")
+      .select("*,order:orders(numero,id)", { count: "exact" })
+      .eq("product_id", id)
+      .order("fecha", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1),
   ]);
+
+  const p = prodRes.data as
+    | {
+        id: string;
+        nombre: string;
+        cantidad: number;
+        stock_minimo: number;
+        estado: ProductStatus;
+        activo: boolean;
+        brand: { nombre: string } | null;
+        images: { url: string; orden: number }[] | null;
+      }
+    | null;
+
+  const product = p
+    ? {
+        id: p.id,
+        nombre: p.nombre,
+        cantidad: p.cantidad,
+        stockMinimo: p.stock_minimo,
+        estado: p.estado,
+        activo: p.activo,
+        brand: p.brand,
+        images: [...(p.images ?? [])].sort((a, b) => a.orden - b.orden).slice(0, 1).map((i) => ({ url: i.url })),
+      }
+    : null;
+
+  const totalMovements = movRes.count ?? 0;
+  const movements = (
+    (movRes.data as
+      | {
+          id: string;
+          tipo: MovementType;
+          cantidad: number;
+          saldo_resultante: number;
+          motivo: string | null;
+          admin_email: string | null;
+          fecha: string;
+          order: { numero: number; id: string } | null;
+        }[]
+      | null) ?? []
+  ).map((m) => ({
+    id: m.id,
+    tipo: m.tipo,
+    cantidad: m.cantidad,
+    saldoResultante: m.saldo_resultante,
+    motivo: m.motivo,
+    adminEmail: m.admin_email,
+    fecha: new Date(m.fecha),
+    order: m.order,
+  }));
 
   if (!product) notFound();
 

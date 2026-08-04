@@ -8,39 +8,60 @@ import { EmptyState } from "@/components/site/empty-state";
 import { OrderStatusBadge } from "@/components/admin/orders/order-status-badge";
 import { CustomerFormDialog } from "@/components/admin/customers/customer-form-dialog";
 import { DeleteCustomerButton } from "@/components/admin/customers/delete-customer-button";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { formatCOP, formatFecha, formatFechaCorta } from "@/lib/format";
 import { ESTADOS_VENTA } from "@/lib/orders";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Cliente" };
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const db = createAdminClient();
 
-  const [customer, totales] = await Promise.all([
-    prisma.customer.findUnique({
-      where: { id },
-      include: {
-        orders: {
-          orderBy: { createdAt: "desc" },
-          include: { _count: { select: { items: true } } },
-        },
-      },
-    }),
-    prisma.order.aggregate({
-      where: { customerId: id, estado: { in: ESTADOS_VENTA } },
-      _sum: { total: true },
-      _count: true,
-      _max: { createdAt: true },
-    }),
-  ]);
+  const { data } = await db
+    .from("customers")
+    .select("id,nombre,whatsapp,direccion,created_at,orders(id,numero,total,estado,created_at,order_items(id))")
+    .eq("id", id)
+    .single();
 
-  if (!customer) notFound();
+  if (!data) notFound();
 
-  const totalGastado = Number(totales._sum.total ?? 0);
-  const compras = totales._count;
-  const ultimaCompra = totales._max.createdAt;
+  const ordersRaw = (
+    (data.orders as
+      | {
+          id: string;
+          numero: number;
+          total: number;
+          estado: OrderStatus;
+          created_at: string;
+          order_items: { id: string }[] | null;
+        }[]
+      | null) ?? []
+  ).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  const customer = {
+    id: data.id,
+    nombre: data.nombre,
+    whatsapp: data.whatsapp,
+    direccion: data.direccion,
+    createdAt: new Date(data.created_at),
+    orders: ordersRaw.map((o) => ({
+      id: o.id,
+      numero: o.numero,
+      total: Number(o.total),
+      estado: o.estado,
+      createdAt: new Date(o.created_at),
+      _count: { items: o.order_items?.length ?? 0 },
+    })),
+  };
+
+  const ventas = ordersRaw.filter((o) => ESTADOS_VENTA.includes(o.estado));
+  const totalGastado = ventas.reduce((sum, o) => sum + Number(o.total), 0);
+  const compras = ventas.length;
+  const ultimaCompraRaw = ventas.map((o) => o.created_at).sort().at(-1);
+  const ultimaCompra = ultimaCompraRaw ? new Date(ultimaCompraRaw) : null;
 
   return (
     <div className="space-y-6">

@@ -7,8 +7,8 @@ import { ProductsTable, type AdminProductRow } from "@/components/admin/products
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { EmptyState } from "@/components/site/empty-state";
 import { adminSearchProducts } from "@/lib/admin/products";
-import { prisma } from "@/lib/prisma";
-import type { ProductStatus } from "@/generated/prisma/client";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Productos" };
 
@@ -24,7 +24,8 @@ export default async function AdminProductsPage({
   const sp = await searchParams;
   const estado = ESTADOS.includes(sp.estado as ProductStatus) ? (sp.estado as ProductStatus) : undefined;
 
-  const [result, brands, categories] = await Promise.all([
+  const db = createAdminClient();
+  const [result, { data: brands }, { data: categories }] = await Promise.all([
     adminSearchProducts({
       q: sp.q || undefined,
       categoria: sp.categoria || undefined,
@@ -32,18 +33,18 @@ export default async function AdminProductsPage({
       estado,
       page: sp.page ? Number(sp.page) : 1,
     }),
-    prisma.brand.findMany({ orderBy: { orden: "asc" }, select: { id: true, nombre: true } }),
-    prisma.category.findMany({ orderBy: { orden: "asc" }, select: { id: true, nombre: true } }),
+    db.from("brands").select("id,nombre").order("orden", { ascending: true }),
+    db.from("categories").select("id,nombre").order("orden", { ascending: true }),
   ]);
 
   const rows: AdminProductRow[] = result.items.map((p) => ({
     id: p.id,
     nombre: p.nombre,
-    imagenPrincipal: p.images[0]?.url ?? null,
+    imagenPrincipal: [...(p.images ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url ?? null,
     marca: p.brand?.nombre ?? null,
     categoria: p.category?.nombre ?? null,
     precio: Number(p.precio),
-    precioOferta: p.precioOferta ? Number(p.precioOferta) : null,
+    precioOferta: p.precio_oferta != null ? Number(p.precio_oferta) : null,
     cantidad: p.cantidad,
     estado: p.estado,
     activo: p.activo,
@@ -71,7 +72,7 @@ export default async function AdminProductsPage({
         </div>
       </div>
 
-      <ProductsFilters brands={brands} categories={categories} />
+      <ProductsFilters brands={brands ?? []} categories={categories ?? []} />
 
       {rows.length === 0 ? (
         <EmptyState title="No hay productos" description="Crea tu primer producto para empezar." />

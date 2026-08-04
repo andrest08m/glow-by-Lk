@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { ORDER_STATUS_LABEL } from "@/lib/orders";
-import type { OrderStatus } from "@/generated/prisma/client";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 const STYLES: Record<OrderStatus, string> = {
   PENDIENTE: "bg-neutral-200 text-neutral-700 dark:bg-neutral-500/15 dark:text-neutral-300",

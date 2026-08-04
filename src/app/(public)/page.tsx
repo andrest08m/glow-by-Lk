@@ -1,6 +1,7 @@
 import { Hero } from "@/components/site/hero";
 import { ProductSection } from "@/components/site/product-section";
 import { CategoryGrid } from "@/components/site/category-grid";
+// el render dinámico lo fija el layout público (force-dynamic)
 import {
   getFeaturedProducts,
   getNewProducts,

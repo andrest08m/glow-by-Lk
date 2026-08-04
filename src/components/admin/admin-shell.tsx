@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Package,
@@ -15,7 +15,7 @@ import {
   Users,
   ClipboardList,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -29,16 +29,13 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Resumen", icon: LayoutDashboard },
+  { href: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
+  { href: "/admin/clientes", label: "Clientes", icon: Users },
+  { href: "/admin/inventario", label: "Inventario", icon: ClipboardList },
   { href: "/admin/productos", label: "Productos", icon: Package },
   { href: "/admin/categorias", label: "Categorías", icon: Tags },
   { href: "/admin/marcas", label: "Marcas", icon: Award },
   { href: "/admin/ajustes", label: "Ajustes", icon: Settings },
-];
-
-const NAV_ITEMS_FASE_2 = [
-  { href: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
-  { href: "/admin/clientes", label: "Clientes", icon: Users },
-  { href: "/admin/inventario", label: "Inventario", icon: ClipboardList },
 ];
 
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
@@ -64,34 +61,20 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
           </Link>
         );
       })}
-
-      <p className="mt-4 px-3.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Fase 2
-      </p>
-      {NAV_ITEMS_FASE_2.map((item) => {
-        const active = pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-medium transition-colors",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "text-foreground/50 hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <item.icon className="size-4" />
-            {item.label}
-          </Link>
-        );
-      })}
     </nav>
   );
 }
 
 function AccountFooter({ userEmail }: { userEmail: string }) {
+  const router = useRouter();
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/admin/login");
+    router.refresh();
+  }
+
   return (
     <div className="border-t border-border/60 p-4">
       <p className="truncate px-1 text-xs text-muted-foreground">{userEmail}</p>
@@ -99,7 +82,7 @@ function AccountFooter({ userEmail }: { userEmail: string }) {
         variant="ghost"
         size="sm"
         className="mt-1 w-full justify-start gap-2 text-muted-foreground"
-        onClick={() => signOut({ redirectTo: "/admin/login" })}
+        onClick={handleSignOut}
       >
         <LogOut className="size-4" /> Cerrar sesión
       </Button>

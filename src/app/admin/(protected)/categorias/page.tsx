@@ -7,16 +7,29 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/site/empty-state";
 import { TaxonomyFormDialog } from "@/components/admin/taxonomy/taxonomy-form-dialog";
 import { DeleteButton } from "@/components/admin/taxonomy/delete-button";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createCategory, updateCategory, deleteCategory, moveCategory } from "./actions";
 
 export const metadata: Metadata = { title: "Categorías" };
 
 export default async function AdminCategoriesPage() {
-  const categories = await prisma.category.findMany({
-    orderBy: { orden: "asc" },
-    include: { _count: { select: { products: true, subcategories: true } } },
-  });
+  const db = createAdminClient();
+  const { data } = await db
+    .from("categories")
+    .select("id,nombre,slug,imagen,orden,subcategories(count),products(count)")
+    .order("orden", { ascending: true });
+
+  const categories = (data ?? []).map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    slug: c.slug,
+    imagen: c.imagen,
+    orden: c.orden,
+    _count: {
+      subcategories: (c.subcategories as unknown as { count: number }[])?.[0]?.count ?? 0,
+      products: (c.products as unknown as { count: number }[])?.[0]?.count ?? 0,
+    },
+  }));
 
   return (
     <div className="space-y-6">

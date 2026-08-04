@@ -8,37 +8,81 @@ import { Button } from "@/components/ui/button";
 import { OrderStatusBadge } from "@/components/admin/orders/order-status-badge";
 import { OrderStatusActions } from "@/components/admin/orders/order-status-actions";
 import { MovementTypeBadge } from "@/components/admin/inventory/movement-type-badge";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { formatCOP, formatFecha } from "@/lib/format";
+import type { MovementType, OrderStatus } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "Pedido" };
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const db = createAdminClient();
 
-  const order = await prisma.order.findUnique({
-    where: { id },
-    include: {
-      customer: { select: { id: true } },
-      items: {
-        include: {
-          product: {
-            select: {
-              id: true,
-              nombre: true,
-              slug: true,
-              cantidad: true,
-              images: { orderBy: { orden: "asc" }, take: 1, select: { url: true } },
-            },
-          },
-        },
+  const { data } = await db
+    .from("orders")
+    .select(
+      "id,numero,estado,total,cliente_nombre,cliente_telefono,stock_descontado,created_at," +
+        "customer:customers(id)," +
+        "items:order_items(id,cantidad,precio_unitario,product:products(id,nombre,slug,cantidad,images:product_images(url,orden)))," +
+        "movements:inventory_movements(id,fecha,tipo,cantidad,motivo)"
+    )
+    .eq("id", id)
+    .single();
+
+  if (!data) notFound();
+
+  const d = data as unknown as {
+    id: string;
+    numero: number;
+    estado: OrderStatus;
+    total: number;
+    cliente_nombre: string;
+    cliente_telefono: string;
+    stock_descontado: boolean;
+    created_at: string;
+    customer: { id: string } | null;
+    items: {
+      id: string;
+      cantidad: number;
+      precio_unitario: number;
+      product: {
+        id: string;
+        nombre: string;
+        slug: string;
+        cantidad: number;
+        images: { url: string; orden: number }[] | null;
+      };
+    }[];
+    movements: { id: string; fecha: string; tipo: MovementType; cantidad: number; motivo: string | null }[] | null;
+  };
+
+  const order = {
+    id: d.id,
+    numero: d.numero,
+    estado: d.estado,
+    total: Number(d.total),
+    clienteNombre: d.cliente_nombre,
+    clienteTelefono: d.cliente_telefono,
+    stockDescontado: d.stock_descontado,
+    createdAt: new Date(d.created_at),
+    customer: d.customer,
+    items: (d.items ?? []).map((it) => ({
+      id: it.id,
+      cantidad: it.cantidad,
+      precioUnitario: Number(it.precio_unitario),
+      product: {
+        id: it.product.id,
+        nombre: it.product.nombre,
+        slug: it.product.slug,
+        cantidad: it.product.cantidad,
+        images: [...(it.product.images ?? [])].sort((a, b) => a.orden - b.orden).slice(0, 1),
       },
-      movements: { orderBy: { fecha: "asc" } },
-    },
-  });
-
-  if (!order) notFound();
+    })),
+    movements: [...(d.movements ?? [])]
+      .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+      .map((m) => ({ id: m.id, fecha: new Date(m.fecha), tipo: m.tipo, cantidad: m.cantidad, motivo: m.motivo })),
+  };
 
   return (
     <div className="space-y-6">

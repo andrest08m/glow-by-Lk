@@ -8,10 +8,9 @@ import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { SearchBox } from "@/components/admin/search-box";
 import { CustomerFormDialog } from "@/components/admin/customers/customer-form-dialog";
 import { DeleteCustomerButton } from "@/components/admin/customers/delete-customer-button";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { formatFechaCorta } from "@/lib/format";
-import type { Prisma } from "@/generated/prisma/client";
 
 export const metadata: Metadata = { title: "Clientes" };
 
@@ -26,33 +25,38 @@ export default async function AdminCustomersPage({
 }) {
   const sp = await searchParams;
   const page = sp.page ? Math.max(1, Number(sp.page)) : 1;
+  const db = createAdminClient();
+  const from = (page - 1) * PAGE_SIZE;
 
-  const where: Prisma.CustomerWhereInput = sp.q
-    ? {
-        OR: [
-          { nombre: { contains: sp.q, mode: "insensitive" } },
-          { whatsapp: { contains: sp.q } },
-        ],
-      }
-    : {};
+  let query = db
+    .from("customers")
+    .select("id,nombre,whatsapp,direccion,orders(created_at)", { count: "exact" });
+  if (sp.q) query = query.or(`nombre.ilike.%${sp.q}%,whatsapp.ilike.%${sp.q}%`);
 
-  const [customers, total] = await Promise.all([
-    prisma.customer.findMany({
-      where,
-      include: {
-        _count: { select: { orders: true } },
-        orders: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { createdAt: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.customer.count({ where }),
-  ]);
+  const { data, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
+
+  const total = count ?? 0;
+  const customers = (
+    (data as
+      | { id: string; nombre: string; whatsapp: string; direccion: string | null; orders: { created_at: string }[] | null }[]
+      | null) ?? []
+  ).map((c) => {
+    const orders = c.orders ?? [];
+    const last = orders
+      .map((o) => o.created_at)
+      .sort()
+      .at(-1);
+    return {
+      id: c.id,
+      nombre: c.nombre,
+      whatsapp: c.whatsapp,
+      direccion: c.direccion,
+      _count: { orders: orders.length },
+      orders: last ? [{ createdAt: new Date(last) }] : [],
+    };
+  });
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

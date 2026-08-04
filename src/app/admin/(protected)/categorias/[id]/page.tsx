@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/site/empty-state";
 import { TaxonomyFormDialog } from "@/components/admin/taxonomy/taxonomy-form-dialog";
 import { DeleteButton } from "@/components/admin/taxonomy/delete-button";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createSubcategory,
   updateSubcategory,
@@ -23,18 +23,29 @@ export default async function CategorySubcategoriesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const db = createAdminClient();
 
-  const category = await prisma.category.findUnique({
-    where: { id },
-    include: {
-      subcategories: {
-        orderBy: { orden: "asc" },
-        include: { _count: { select: { products: true } } },
-      },
-    },
-  });
+  const { data } = await db
+    .from("categories")
+    .select("id,nombre,subcategories(id,nombre,slug,orden,products(count))")
+    .eq("id", id)
+    .single();
 
-  if (!category) notFound();
+  if (!data) notFound();
+
+  const category = {
+    id: data.id,
+    nombre: data.nombre,
+    subcategories: [...(data.subcategories ?? [])]
+      .sort((a, b) => a.orden - b.orden)
+      .map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        slug: s.slug,
+        orden: s.orden,
+        _count: { products: (s.products as unknown as { count: number }[])?.[0]?.count ?? 0 },
+      })),
+  };
 
   return (
     <div className="space-y-6">

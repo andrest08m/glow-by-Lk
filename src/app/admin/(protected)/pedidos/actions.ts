@@ -1,16 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { OrderStatus } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSession } from "@/lib/admin/guard";
-import { StockInsuficienteError } from "@/lib/inventory";
-import { crearPedido, cambiarEstadoPedido, TransicionInvalidaError } from "@/lib/order-service";
+import { crearPedido, cambiarEstadoPedido } from "@/lib/order-service";
 import { createOrderSchema } from "@/lib/validations/order";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export type OrderActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
-async function revalidateOrderPages(orderId: string, customerId?: string | null, productIds?: string[]) {
+type AdminDb = ReturnType<typeof createAdminClient>;
+
+async function revalidateOrderPages(db: AdminDb, orderId: string, customerId?: string | null, productIds?: string[]) {
   revalidatePath("/admin/pedidos");
   revalidatePath(`/admin/pedidos/${orderId}`);
   revalidatePath("/admin");
@@ -21,18 +22,16 @@ async function revalidateOrderPages(orderId: string, customerId?: string | null,
 
   if (productIds?.length) {
     for (const pid of productIds) revalidatePath(`/admin/inventario/${pid}`);
-    const slugs = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-      select: { slug: true },
-    });
+    const { data: slugs } = await db.from("products").select("slug").in("id", productIds);
     revalidatePath("/");
     revalidatePath("/productos");
-    for (const { slug } of slugs) revalidatePath(`/producto/${slug}`);
+    for (const { slug } of slugs ?? []) revalidatePath(`/producto/${slug}`);
   }
 }
 
 export async function createOrderAction(input: unknown): Promise<OrderActionResult> {
   await requireAdminSession();
+  const db = createAdminClient();
 
   const parsed = createOrderSchema.safeParse(input);
   if (!parsed.success) {
@@ -40,15 +39,12 @@ export async function createOrderAction(input: unknown): Promise<OrderActionResu
   }
 
   try {
-    const order = await crearPedido(prisma, parsed.data);
-    await revalidateOrderPages(order.id, order.customerId);
+    const order = await crearPedido(db, parsed.data);
+    await revalidateOrderPages(db, order.id, order.customer_id);
     return { ok: true, id: order.id };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("cliente")) {
-      return { ok: false, error: error.message };
-    }
     console.error("createOrderAction:", error);
-    return { ok: false, error: "No se pudo crear el pedido." };
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo crear el pedido." };
   }
 }
 
@@ -56,25 +52,21 @@ export async function changeOrderStatusAction(
   orderId: string,
   nuevoEstado: OrderStatus
 ): Promise<OrderActionResult> {
-  const session = await requireAdminSession();
+  const { email } = await requireAdminSession();
+  const db = createAdminClient();
 
   try {
-    const order = await cambiarEstadoPedido(prisma, orderId, nuevoEstado, session.user.email);
-    const items = await prisma.orderItem.findMany({
-      where: { orderId },
-      select: { productId: true },
-    });
+    const order = await cambiarEstadoPedido(db, orderId, nuevoEstado, email);
+    const { data: items } = await db.from("order_items").select("product_id").eq("order_id", orderId);
     await revalidateOrderPages(
+      db,
       orderId,
-      order.customerId,
-      items.map((i) => i.productId)
+      order.customer_id,
+      (items ?? []).map((i) => i.product_id)
     );
     return { ok: true, id: orderId };
   } catch (error) {
-    if (error instanceof StockInsuficienteError || error instanceof TransicionInvalidaError) {
-      return { ok: false, error: error.message };
-    }
     console.error("changeOrderStatusAction:", error);
-    return { ok: false, error: "No se pudo cambiar el estado del pedido." };
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo cambiar el estado." };
   }
 }

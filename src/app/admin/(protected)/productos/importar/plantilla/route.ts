@@ -1,9 +1,12 @@
-import { auth } from "@/auth";
+import { createClient } from "@/lib/supabase/server";
 import { toCsv, PRODUCT_CSV_HEADERS } from "@/lib/csv";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return new Response("No autorizado", { status: 401 });
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return new Response("No autorizado", { status: 401 });
 
   const ejemplo = [
     "Labial mate rosa",

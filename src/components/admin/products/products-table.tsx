@@ -32,7 +32,7 @@ import {
   duplicateProduct,
   toggleProductActivo,
 } from "@/app/admin/(protected)/productos/actions";
-import type { ProductStatus } from "@/generated/prisma/client";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export type AdminProductRow = {
   id: string;

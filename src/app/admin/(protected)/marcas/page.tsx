@@ -6,16 +6,26 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/site/empty-state";
 import { TaxonomyFormDialog } from "@/components/admin/taxonomy/taxonomy-form-dialog";
 import { DeleteButton } from "@/components/admin/taxonomy/delete-button";
-import { prisma } from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createBrand, updateBrand, deleteBrand, moveBrand } from "./actions";
 
 export const metadata: Metadata = { title: "Marcas" };
 
 export default async function AdminBrandsPage() {
-  const brands = await prisma.brand.findMany({
-    orderBy: { orden: "asc" },
-    include: { _count: { select: { products: true } } },
-  });
+  const db = createAdminClient();
+  const { data } = await db
+    .from("brands")
+    .select("id,nombre,slug,imagen,orden,products(count)")
+    .order("orden", { ascending: true });
+
+  const brands = (data ?? []).map((b) => ({
+    id: b.id,
+    nombre: b.nombre,
+    slug: b.slug,
+    imagen: b.imagen,
+    orden: b.orden,
+    _count: { products: (b.products as unknown as { count: number }[])?.[0]?.count ?? 0 },
+  }));
 
   return (
     <div className="space-y-6">

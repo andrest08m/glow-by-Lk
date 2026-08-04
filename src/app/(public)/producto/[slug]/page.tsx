@@ -12,6 +12,7 @@ import { productWhatsAppMessage } from "@/lib/whatsapp";
 import { getProductBySlug } from "@/lib/products";
 import { getSiteSettings } from "@/lib/site-settings";
 
+// el render dinámico lo fija el layout público (force-dynamic)
 type Params = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {

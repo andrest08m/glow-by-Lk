@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { MOVEMENT_TYPE_LABEL } from "@/lib/validations/inventory";
-import type { MovementType } from "@/generated/prisma/client";
+import type { MovementType } from "@/lib/supabase/database.types";
 
 const STYLES: Record<MovementType, string> = {
   ENTRADA: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",

@@ -1,4 +1,4 @@
-import type { OrderStatus } from "@/generated/prisma/client";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 /** Estados que cuentan como venta (decisión: desde CONFIRMADO en adelante, nunca cancelados). */
 export const ESTADOS_VENTA: OrderStatus[] = ["CONFIRMADO", "EN_PREPARACION", "ENVIADO", "ENTREGADO"];

@@ -1,4 +1,4 @@
-import type { ProductStatus } from "@/generated/prisma/client";
+import type { ProductStatus } from "@/lib/supabase/database.types";
 
 export type ProductImageDTO = {
   id: string;
