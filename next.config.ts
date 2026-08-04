@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    serverActions: {
+      // Las fotos de celular pesan varios MB; el límite por defecto (1MB) hacía
+      // fallar la subida. Permitimos hasta 50MB por acción (varias fotos juntas).
+      bodySizeLimit: "50mb",
+    },
+  },
 };
 
 export default nextConfig;

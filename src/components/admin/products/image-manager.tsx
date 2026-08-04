@@ -138,7 +138,7 @@ export function ImageManager({
               <input
                 id={inputId}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif,.avif,.webp,.jpg,.jpeg,.png,.gif"
                 multiple
                 className="hidden"
                 onChange={(e) => {
