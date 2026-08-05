@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSession } from "@/lib/admin/guard";
 import { computeEstado } from "@/lib/product-status";
+import { registrarMovimiento } from "@/lib/inventory";
 import { toSlug, uniqueSlug } from "@/lib/slug";
 import { uploadImage, deleteImageByUrl } from "@/lib/storage";
 import { productSchema, imageManifestSchema } from "@/lib/validations/product";
@@ -80,12 +81,14 @@ async function applyImageManifest(db: AdminDb, productId: string, slug: string, 
 }
 
 export async function createProduct(formData: FormData) {
-  await requireAdminSession();
+  const { email } = await requireAdminSession();
   const db = createAdminClient();
   const data = parseProductFormData(formData);
 
   const slug = await uniqueSlug(data.slug || data.nombre, (s) => slugExists(db, s));
 
+  // Se crea en 0 y el stock inicial entra como movimiento ENTRADA, para que
+  // quede registrado en el histórico/kardex desde el nacimiento del producto.
   const { data: product, error } = await db
     .from("products")
     .insert({
@@ -98,9 +101,9 @@ export async function createProduct(formData: FormData) {
       precio: data.precio,
       precio_oferta: data.precioOferta ?? null,
       costo: data.costo ?? null,
-      cantidad: data.cantidad,
+      cantidad: 0,
       stock_minimo: data.stockMinimo,
-      estado: computeEstado(data.cantidad, data.stockMinimo),
+      estado: computeEstado(0, data.stockMinimo),
       destacado: data.destacado,
       nuevo: data.nuevo,
       mas_vendido: data.masVendido,
@@ -114,17 +117,27 @@ export async function createProduct(formData: FormData) {
 
   if (error || !product) throw new Error(error?.message ?? "No se pudo crear el producto.");
 
+  if (data.cantidad > 0) {
+    await registrarMovimiento(db, {
+      productId: product.id,
+      tipo: "ENTRADA",
+      cantidad: data.cantidad,
+      motivo: "Stock inicial",
+      adminEmail: email,
+    });
+  }
+
   await applyImageManifest(db, product.id, product.slug, formData);
   revalidateCatalog(product.slug);
   return { id: product.id };
 }
 
 export async function updateProduct(id: string, formData: FormData) {
-  await requireAdminSession();
+  const { email } = await requireAdminSession();
   const db = createAdminClient();
   const data = parseProductFormData(formData);
 
-  const { data: existing } = await db.from("products").select("slug").eq("id", id).single();
+  const { data: existing } = await db.from("products").select("slug,cantidad").eq("id", id).single();
   if (!existing) throw new Error("El producto no existe.");
 
   let slug = existing.slug;
@@ -133,6 +146,11 @@ export async function updateProduct(id: string, formData: FormData) {
     slug = await uniqueSlug(desiredSlug, (s) => slugExists(db, s, id));
   }
 
+  const cantidadCambio = data.cantidad !== existing.cantidad;
+
+  // No tocamos cantidad/estado en el update directo: si la cantidad cambió, va
+  // por un movimiento AJUSTE (queda en el histórico). Si no cambió, recalculamos
+  // el estado por si cambió el stock mínimo.
   const { error } = await db
     .from("products")
     .update({
@@ -145,9 +163,8 @@ export async function updateProduct(id: string, formData: FormData) {
       precio: data.precio,
       precio_oferta: data.precioOferta ?? null,
       costo: data.costo ?? null,
-      cantidad: data.cantidad,
       stock_minimo: data.stockMinimo,
-      estado: computeEstado(data.cantidad, data.stockMinimo),
+      ...(cantidadCambio ? {} : { estado: computeEstado(existing.cantidad, data.stockMinimo) }),
       destacado: data.destacado,
       nuevo: data.nuevo,
       mas_vendido: data.masVendido,
@@ -160,6 +177,17 @@ export async function updateProduct(id: string, formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  if (cantidadCambio) {
+    // AJUSTE fija la cantidad exacta y registra el delta en el kardex.
+    await registrarMovimiento(db, {
+      productId: id,
+      tipo: "AJUSTE",
+      cantidad: data.cantidad,
+      motivo: "Ajuste desde edición de producto",
+      adminEmail: email,
+    });
+  }
 
   await applyImageManifest(db, id, slug, formData);
   revalidateCatalog(slug);
