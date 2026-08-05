@@ -84,7 +84,8 @@ export function ProductCard({
                 </span>
               )}
             </div>
-            {product.estado !== "DISPONIBLE" && <EstadoBadge estado={product.estado} />}
+            {/* Público: solo mostramos "Agotado", nunca "Poco stock" (no revela nivel) */}
+            {product.estado === "AGOTADO" && <EstadoBadge estado="AGOTADO" />}
           </div>
         </div>
       </Link>

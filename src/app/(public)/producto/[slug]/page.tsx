@@ -75,10 +75,8 @@ export default async function ProductPage({ params }: Params) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <EstadoBadge estado={product.estado} />
-            {product.estado !== "AGOTADO" && (
-              <span className="text-sm text-muted-foreground">{product.cantidad} disponibles</span>
-            )}
+            {/* El público solo ve disponibilidad, nunca la cantidad de stock */}
+            <EstadoBadge estado={product.estado === "AGOTADO" ? "AGOTADO" : "DISPONIBLE"} />
           </div>
 
           <div className="flex flex-wrap items-end gap-3">

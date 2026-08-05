@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   Users,
   ClipboardList,
+  History,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
   { href: "/admin/clientes", label: "Clientes", icon: Users },
   { href: "/admin/inventario", label: "Inventario", icon: ClipboardList },
+  { href: "/admin/movimientos", label: "Histórico", icon: History },
   { href: "/admin/productos", label: "Productos", icon: Package },
   { href: "/admin/categorias", label: "Categorías", icon: Tags },
   { href: "/admin/marcas", label: "Marcas", icon: Award },

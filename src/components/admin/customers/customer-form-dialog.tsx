@@ -117,9 +117,9 @@ export function CustomerFormDialog({
                 <FormItem>
                   <FormLabel>WhatsApp</FormLabel>
                   <FormControl>
-                    <Input inputMode="numeric" placeholder="573001234567" {...field} />
+                    <Input inputMode="numeric" placeholder="3001234567" {...field} />
                   </FormControl>
-                  <FormDescription>Solo dígitos, con indicativo del país (57 para Colombia).</FormDescription>
+                  <FormDescription>Celular de 10 dígitos (ej: 3001234567).</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

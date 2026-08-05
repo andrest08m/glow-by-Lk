@@ -168,12 +168,17 @@ export type Database = {
         Args: { p_order_id: string; p_nuevo_estado: OrderStatus; p_admin_email?: string | null };
         Returns: OrderRow;
       };
+      eliminar_pedido: {
+        Args: { p_order_id: string; p_admin_email?: string | null };
+        Returns: undefined;
+      };
       ventas_por_dia: { Args: { p_dias?: number }; Returns: { fecha: string; total: number }[] };
       top_productos: {
         Args: { p_limite?: number };
         Returns: { product_id: string; nombre: string; unidades: number }[];
       };
       dashboard_metricas: { Args: Record<string, never>; Returns: Record<string, number> };
+      movimientos_resumen: { Args: Record<string, never>; Returns: Record<string, number> };
     };
     Enums: Record<string, never>;
   };

@@ -5,7 +5,8 @@ export const customerSchema = z.object({
   whatsapp: z
     .string()
     .trim()
-    .regex(/^\d{10,15}$/, "Solo dígitos, con indicativo de país (ej: 573001234567)"),
+    // Colombia: 10 dígitos (ej: 3001234567). También se acepta con indicativo.
+    .regex(/^\d{10}$|^57\d{10}$/, "Número de celular de 10 dígitos (ej: 3001234567)"),
   direccion: z.string().trim().max(300, "Máximo 300 caracteres").optional().or(z.literal("")),
 });
 

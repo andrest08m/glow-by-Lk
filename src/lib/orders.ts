@@ -3,6 +3,15 @@ import type { OrderStatus } from "@/lib/supabase/database.types";
 /** Estados que cuentan como venta (decisión: desde CONFIRMADO en adelante, nunca cancelados). */
 export const ESTADOS_VENTA: OrderStatus[] = ["CONFIRMADO", "EN_PREPARACION", "ENVIADO", "ENTREGADO"];
 
+export const ALL_ORDER_STATUSES: OrderStatus[] = [
+  "PENDIENTE",
+  "CONFIRMADO",
+  "EN_PREPARACION",
+  "ENVIADO",
+  "ENTREGADO",
+  "CANCELADO",
+];
+
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   PENDIENTE: "Pendiente",
   CONFIRMADO: "Confirmado",
@@ -12,15 +21,10 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   CANCELADO: "Cancelado",
 };
 
-/** Transiciones permitidas; el server las valida antes de cambiar estado. */
-export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  PENDIENTE: ["CONFIRMADO", "CANCELADO"],
-  CONFIRMADO: ["EN_PREPARACION", "ENVIADO", "CANCELADO"],
-  EN_PREPARACION: ["ENVIADO", "CANCELADO"],
-  ENVIADO: ["ENTREGADO", "CANCELADO"],
-  ENTREGADO: [],
-  CANCELADO: [],
-};
+/** Un estado "de venta" descuenta stock (desde CONFIRMADO en adelante). */
+export function esEstadoVenta(estado: OrderStatus) {
+  return ESTADOS_VENTA.includes(estado);
+}
 
 /** Inicio del día en Bogotá (Colombia es UTC-5 fijo, sin horario de verano). */
 export function bogotaStartOfDay(now = new Date()) {

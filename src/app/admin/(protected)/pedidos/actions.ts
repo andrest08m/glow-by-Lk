@@ -70,3 +70,23 @@ export async function changeOrderStatusAction(
     return { ok: false, error: error instanceof Error ? error.message : "No se pudo cambiar el estado." };
   }
 }
+
+export async function deleteOrderAction(orderId: string): Promise<OrderActionResult> {
+  const { email } = await requireAdminSession();
+  const db = createAdminClient();
+
+  try {
+    // ids de productos antes de borrar, para revalidar catálogo/inventario
+    const { data: items } = await db.from("order_items").select("product_id").eq("order_id", orderId);
+    const { data: order } = await db.from("orders").select("customer_id").eq("id", orderId).single();
+
+    const { error } = await db.rpc("eliminar_pedido", { p_order_id: orderId, p_admin_email: email });
+    if (error) throw new Error(error.message);
+
+    await revalidateOrderPages(db, orderId, order?.customer_id, (items ?? []).map((i) => i.product_id));
+    return { ok: true };
+  } catch (error) {
+    console.error("deleteOrderAction:", error);
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo eliminar el pedido." };
+  }
+}
