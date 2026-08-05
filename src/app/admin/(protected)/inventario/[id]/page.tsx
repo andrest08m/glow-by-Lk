@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/site/empty-state";
 import { CatalogPagination } from "@/components/product/catalog-pagination";
 import { MovementDialog } from "@/components/admin/inventory/movement-dialog";
 import { MovementTypeBadge } from "@/components/admin/inventory/movement-type-badge";
+import { DeleteMovementButton } from "@/components/admin/inventory/delete-movement-button";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatFecha } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -165,6 +166,7 @@ export default async function ProductKardexPage({
                 <TableHead className="text-right">Saldo</TableHead>
                 <TableHead className="hidden md:table-cell">Motivo</TableHead>
                 <TableHead className="hidden lg:table-cell">Registrado por</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -206,6 +208,9 @@ export default async function ProductKardexPage({
                   </TableCell>
                   <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
                     {m.adminEmail ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <DeleteMovementButton id={m.id} />
                   </TableCell>
                 </TableRow>
               ))}
