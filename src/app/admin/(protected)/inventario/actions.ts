@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSession } from "@/lib/admin/guard";
 import { registrarMovimiento, StockInsuficienteError } from "@/lib/inventory";
@@ -20,27 +21,10 @@ function revalidateInventory(productId: string, slug?: string) {
   if (slug) revalidatePath(`/producto/${slug}`);
 }
 
-/**
- * Elimina un movimiento del kardex y recalcula el stock y los saldos del
- * producto a partir de los movimientos restantes (el kardex es la fuente de
- * verdad: stock = suma de los movimientos). Sirve para corregir entradas de
- * prueba o equivocadas.
- */
-export async function deleteMovement(id: string): Promise<ActionResult> {
-  await requireAdminSession();
-  const db = createAdminClient();
+type AdminDb = ReturnType<typeof createAdminClient>;
 
-  const { data: mov } = await db
-    .from("inventory_movements")
-    .select("product_id")
-    .eq("id", id)
-    .single();
-  if (!mov) return { ok: true };
-
-  const productId = mov.product_id as string;
-  await db.from("inventory_movements").delete().eq("id", id);
-
-  // recalcular saldos de los movimientos restantes (por fecha) y el stock final
+/** Recalcula los saldos del kardex y el stock del producto = suma de movimientos. */
+async function recomputeProduct(db: AdminDb, productId: string) {
   const { data: rest } = await db
     .from("inventory_movements")
     .select("id,cantidad,fecha")
@@ -68,7 +52,70 @@ export async function deleteMovement(id: string): Promise<ActionResult> {
     })
     .eq("id", productId);
 
-  revalidateInventory(productId, product?.slug);
+  return product?.slug as string | undefined;
+}
+
+/**
+ * Elimina un movimiento del kardex y recalcula el stock y los saldos del
+ * producto a partir de los movimientos restantes (el kardex es la fuente de
+ * verdad: stock = suma de los movimientos).
+ */
+export async function deleteMovement(id: string): Promise<ActionResult> {
+  await requireAdminSession();
+  const db = createAdminClient();
+
+  const { data: mov } = await db
+    .from("inventory_movements")
+    .select("product_id")
+    .eq("id", id)
+    .single();
+  if (!mov) return { ok: true };
+
+  const productId = mov.product_id as string;
+  await db.from("inventory_movements").delete().eq("id", id);
+
+  const slug = await recomputeProduct(db, productId);
+  revalidateInventory(productId, slug);
+  return { ok: true };
+}
+
+const editMovementSchema = z.object({
+  tipo: z.enum(["ENTRADA", "SALIDA", "AJUSTE"]),
+  cantidad: z.coerce.number().int("Debe ser entero").positive("Debe ser mayor a 0"),
+  motivo: z.string().trim().max(300).optional().or(z.literal("")),
+});
+
+/** Edita el tipo, la cantidad o el motivo de un movimiento y recalcula todo. */
+export async function updateMovement(id: string, formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const db = createAdminClient();
+
+  const parsed = editMovementSchema.safeParse({
+    tipo: formData.get("tipo"),
+    cantidad: formData.get("cantidad"),
+    motivo: formData.get("motivo"),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  const { data: mov } = await db
+    .from("inventory_movements")
+    .select("product_id")
+    .eq("id", id)
+    .single();
+  if (!mov) return { ok: false, error: "El movimiento no existe." };
+
+  // El efecto sobre el stock es el delta con signo: SALIDA resta, el resto suma.
+  const delta = parsed.data.tipo === "SALIDA" ? -parsed.data.cantidad : parsed.data.cantidad;
+
+  await db
+    .from("inventory_movements")
+    .update({ tipo: parsed.data.tipo, cantidad: delta, motivo: parsed.data.motivo || null })
+    .eq("id", id);
+
+  const slug = await recomputeProduct(db, mov.product_id as string);
+  revalidateInventory(mov.product_id as string, slug);
   return { ok: true };
 }
 
