@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { formatCOP } from "@/lib/format";
-import { EstadoBadge } from "@/components/product/estado-badge";
 import type { ProductCardDTO } from "@/types/product";
 
 export function ProductCard({
@@ -58,14 +57,14 @@ export function ProductCard({
         </div>
 
         <div className="flex flex-1 flex-col gap-1 p-4">
+          <h3 className="line-clamp-2 font-heading text-base leading-snug text-foreground">
+            {product.nombre}
+          </h3>
           {product.marca && (
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {product.marca.nombre}
             </span>
           )}
-          <h3 className="line-clamp-2 font-heading text-base leading-snug text-foreground">
-            {product.nombre}
-          </h3>
 
           <div className="mt-auto flex items-end justify-between gap-2 pt-3">
             <div className="flex flex-col">
@@ -84,8 +83,7 @@ export function ProductCard({
                 </span>
               )}
             </div>
-            {/* Público: solo mostramos "Agotado", nunca "Poco stock" (no revela nivel) */}
-            {product.estado === "AGOTADO" && <EstadoBadge estado="AGOTADO" />}
+            {/* El público no ve el estado de stock (ni "Agotado" ni "Poco stock") */}
           </div>
         </div>
       </Link>

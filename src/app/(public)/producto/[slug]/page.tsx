@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Container } from "@/components/site/container";
 import { ProductGallery } from "@/components/product/product-gallery";
-import { EstadoBadge } from "@/components/product/estado-badge";
 import { WhatsAppButton } from "@/components/site/whatsapp-button";
 import { Reveal } from "@/components/motion/reveal";
 import { formatCOP } from "@/lib/format";
@@ -72,11 +71,6 @@ export default async function ProductPage({ params }: Params) {
               </span>
             )}
             <h1 className="font-heading text-3xl text-foreground sm:text-4xl">{product.nombre}</h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* El público solo ve disponibilidad, nunca la cantidad de stock */}
-            <EstadoBadge estado={product.estado === "AGOTADO" ? "AGOTADO" : "DISPONIBLE"} />
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
