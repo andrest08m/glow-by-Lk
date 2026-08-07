@@ -17,7 +17,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   CONFIRMADO: "Confirmado",
   EN_PREPARACION: "En preparación",
   ENVIADO: "Enviado",
-  ENTREGADO: "Entregado",
+  ENTREGADO: "Pagado",
   CANCELADO: "Cancelado",
 };
 
