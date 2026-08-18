@@ -81,8 +81,9 @@ export function NewOrderForm({
     if (clienteTab === "existente" && !customerId) return "Elige un cliente.";
     if (clienteTab === "nuevo") {
       if (nuevoNombre.trim().length < 2) return "Escribe el nombre del cliente.";
-      if (!/^\d{10}$|^57\d{10}$/.test(nuevoWhatsapp.trim()))
-        return "WhatsApp del cliente: celular de 10 dígitos (ej: 3001234567).";
+      // teléfono opcional: solo se valida si se ingresó algo
+      if (nuevoWhatsapp.trim() && !/^\d{10}$|^57\d{10}$/.test(nuevoWhatsapp.trim()))
+        return "WhatsApp: celular de 10 dígitos (ej: 3001234567) o dejalo vacío.";
     }
     const items = rows.filter((r) => r.productId);
     if (items.length === 0) return "Agrega al menos un producto.";

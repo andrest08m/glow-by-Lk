@@ -4,7 +4,7 @@ import { mapRpcError } from "@/lib/inventory";
 
 export type CrearPedidoInput = {
   customerId?: string | null;
-  nuevoCliente?: { nombre: string; whatsapp: string; direccion?: string | null } | null;
+  nuevoCliente?: { nombre: string; whatsapp?: string | null; direccion?: string | null } | null;
   items: { productId: string; cantidad: number }[];
 };
 
@@ -18,7 +18,7 @@ export async function crearPedido(
     p_nuevo_cliente: input.nuevoCliente
       ? {
           nombre: input.nuevoCliente.nombre,
-          whatsapp: input.nuevoCliente.whatsapp,
+          whatsapp: input.nuevoCliente.whatsapp ?? "",
           direccion: input.nuevoCliente.direccion ?? "",
         }
       : null,

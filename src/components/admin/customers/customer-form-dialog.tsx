@@ -55,7 +55,7 @@ export function CustomerFormDialog({
   function onSubmit(values: CustomerFormValues) {
     const fd = new FormData();
     fd.append("nombre", values.nombre);
-    fd.append("whatsapp", values.whatsapp);
+    fd.append("whatsapp", values.whatsapp ?? "");
     fd.append("direccion", values.direccion ?? "");
 
     startTransition(async () => {
@@ -115,11 +115,11 @@ export function CustomerFormDialog({
               name="whatsapp"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>WhatsApp</FormLabel>
+                  <FormLabel>WhatsApp (opcional)</FormLabel>
                   <FormControl>
                     <Input inputMode="numeric" placeholder="3001234567" {...field} />
                   </FormControl>
-                  <FormDescription>Celular de 10 dígitos (ej: 3001234567).</FormDescription>
+                  <FormDescription>Celular de 10 dígitos. Podés dejarlo vacío.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

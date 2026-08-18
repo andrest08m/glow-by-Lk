@@ -33,7 +33,7 @@ export async function createCustomer(formData: FormData): Promise<ActionResult> 
     .from("customers")
     .insert({
       nombre: parsed.data.nombre,
-      whatsapp: parsed.data.whatsapp,
+      whatsapp: parsed.data.whatsapp || null,
       direccion: parsed.data.direccion || null,
     })
     .select("id")
@@ -58,7 +58,7 @@ export async function updateCustomer(id: string, formData: FormData): Promise<Ac
     .from("customers")
     .update({
       nombre: parsed.data.nombre,
-      whatsapp: parsed.data.whatsapp,
+      whatsapp: parsed.data.whatsapp || null,
       direccion: parsed.data.direccion || null,
     })
     .eq("id", id);
