@@ -71,6 +71,15 @@ export type ProductImageRow = {
   orden: number;
 };
 
+export type ProductTonoRow = {
+  id: string;
+  product_id: string;
+  nombre: string;
+  imagen: string | null;
+  orden: number;
+  created_at: string;
+};
+
 export type SiteSettingRow = { clave: string; valor: string };
 
 export type CustomerRow = {
@@ -133,6 +142,10 @@ export type Database = {
       product_images: Table<
         ProductImageRow,
         Partial<ProductImageRow> & { product_id: string; url: string }
+      >;
+      product_tonos: Table<
+        ProductTonoRow,
+        Partial<ProductTonoRow> & { product_id: string; nombre: string }
       >;
       site_settings: Table<SiteSettingRow, SiteSettingRow>;
       customers: Table<CustomerRow, Partial<CustomerRow> & { nombre: string; whatsapp: string }>;

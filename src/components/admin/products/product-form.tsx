@@ -28,6 +28,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { ImageManager, type ImageItem } from "@/components/admin/products/image-manager";
+import { TonoManager, type TonoItem } from "@/components/admin/products/tono-manager";
 import { EstadoBadge } from "@/components/product/estado-badge";
 import { productSchema } from "@/lib/validations/product";
 import { toSlug } from "@/lib/slug";
@@ -66,6 +67,7 @@ export function ProductForm({
   productId,
   defaultValues,
   initialImages = [],
+  initialTonos = [],
   brands,
   categories,
 }: {
@@ -73,6 +75,7 @@ export function ProductForm({
   productId?: string;
   defaultValues?: Partial<FormState>;
   initialImages?: { id: string; url: string; alt: string | null }[];
+  initialTonos?: { id: string; nombre: string; imagen: string | null }[];
   brands: { id: string; nombre: string }[];
   categories: CategoryOption[];
 }) {
@@ -80,6 +83,9 @@ export function ProductForm({
   const [isPending, startTransition] = useTransition();
   const [images, setImages] = useState<ImageItem[]>(
     initialImages.map((img) => ({ kind: "existing", id: img.id, url: img.url, alt: img.alt }))
+  );
+  const [tonos, setTonos] = useState<TonoItem[]>(
+    initialTonos.map((t) => ({ key: t.id, id: t.id, nombre: t.nombre, imagenUrl: t.imagen }))
   );
 
   const form = useForm<FormState>({
@@ -158,6 +164,21 @@ export function ProductForm({
       if (item.kind === "new") fd.append(item.tempId, item.file);
     });
 
+    // Tonos: manifiesto + archivos nuevos bajo la clave tono-file-<key>
+    const tonoManifest = tonos
+      .filter((t) => t.nombre.trim())
+      .map((t, index) => ({
+        id: t.id,
+        key: t.key,
+        nombre: t.nombre.trim(),
+        orden: index,
+        hasNewImage: !!t.file,
+      }));
+    fd.append("tonoManifest", JSON.stringify(tonoManifest));
+    tonos.forEach((t) => {
+      if (t.file) fd.append(`tono-file-${t.key}`, t.file);
+    });
+
     startTransition(async () => {
       try {
         if (mode === "create") {
@@ -196,6 +217,17 @@ export function ProductForm({
         <section className="space-y-5 rounded-3xl border border-border/60 bg-card p-5 sm:p-6">
           <h2 className="font-heading text-lg text-foreground">Imágenes</h2>
           <ImageManager images={images} onChange={setImages} />
+        </section>
+
+        <section className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 sm:p-6">
+          <div>
+            <h2 className="font-heading text-lg text-foreground">Tonos (opcional)</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Para productos con variantes de color/tono (correctores, polvos, etc.). Si agregás
+              tonos, el cliente los verá en un selector con la foto de cada uno.
+            </p>
+          </div>
+          <TonoManager tonos={tonos} onChange={setTonos} />
         </section>
 
         <section className="grid gap-5 rounded-3xl border border-border/60 bg-card p-5 sm:grid-cols-2 sm:p-6">

@@ -89,7 +89,7 @@ export async function getProductBySlug(slug: string): Promise<ProductDetailDTO |
   const { data } = await supabase
     .from("products")
     .select(
-      "*,images:product_images(id,url,alt,orden)," +
+      "*,images:product_images(id,url,alt,orden),tonos:product_tonos(id,nombre,imagen,orden)," +
         "brand:brands(nombre,slug),category:categories(nombre,slug),subcategory:subcategories(nombre,slug)"
     )
     .eq("slug", slug)
@@ -98,6 +98,7 @@ export async function getProductBySlug(slug: string): Promise<ProductDetailDTO |
 
   if (!data) return null;
   const p = data as unknown as CardRow & {
+    tonos: { id: string; nombre: string; imagen: string | null; orden: number }[] | null;
     codigo_interno: string | null;
     sku: string | null;
     descripcion_corta: string | null;
@@ -131,6 +132,9 @@ export async function getProductBySlug(slug: string): Promise<ProductDetailDTO |
     descripcionLarga: p.descripcion_larga,
     cantidad: p.cantidad,
     images: images.map((img) => ({ id: img.id, url: img.url, alt: img.alt, orden: img.orden })),
+    tonos: [...(p.tonos ?? [])]
+      .sort((a, b) => a.orden - b.orden)
+      .map((t) => ({ id: t.id, nombre: t.nombre, imagen: t.imagen })),
     subcategoria: p.subcategory ? { nombre: p.subcategory.nombre, slug: p.subcategory.slug } : null,
   };
 }

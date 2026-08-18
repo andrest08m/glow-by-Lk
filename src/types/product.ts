@@ -23,6 +23,8 @@ export type ProductCardDTO = {
   categoria: { nombre: string; slug: string } | null;
 };
 
+export type ProductTonoDTO = { id: string; nombre: string; imagen: string | null };
+
 export type ProductDetailDTO = ProductCardDTO & {
   codigoInterno: string | null;
   sku: string | null;
@@ -30,5 +32,6 @@ export type ProductDetailDTO = ProductCardDTO & {
   descripcionLarga: string | null;
   cantidad: number;
   images: ProductImageDTO[];
+  tonos: ProductTonoDTO[];
   subcategoria: { nombre: string; slug: string } | null;
 };

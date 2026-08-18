@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Container } from "@/components/site/container";
 import { ProductGallery } from "@/components/product/product-gallery";
+import { TonoSelector } from "@/components/product/tono-selector";
 import { WhatsAppButton } from "@/components/site/whatsapp-button";
 import { Reveal } from "@/components/motion/reveal";
 import { formatCOP } from "@/lib/format";
@@ -104,6 +105,8 @@ export default async function ProductPage({ params }: Params) {
             message={productWhatsAppMessage(product.nombre)}
             className="w-full sm:w-auto"
           />
+
+          {product.tonos.length > 0 && <TonoSelector tonos={product.tonos} />}
 
           {product.descripcionLarga && (
             <div className="mt-4 space-y-2 border-t border-border/60 pt-6">

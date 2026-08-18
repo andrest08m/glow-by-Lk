@@ -10,7 +10,11 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
   const db = createAdminClient();
 
   const [{ data: product }, { data: brands }, { data: categories }] = await Promise.all([
-    db.from("products").select("*,images:product_images(id,url,alt,orden)").eq("id", id).single(),
+    db
+      .from("products")
+      .select("*,images:product_images(id,url,alt,orden),tonos:product_tonos(id,nombre,imagen,orden)")
+      .eq("id", id)
+      .single(),
     db.from("brands").select("id,nombre").order("orden", { ascending: true }),
     db
       .from("categories")
@@ -32,6 +36,10 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
     .sort((a, b) => a.orden - b.orden)
     .map((img) => ({ id: img.id, url: img.url, alt: img.alt }));
 
+  const tonos = [...((product.tonos as { id: string; nombre: string; imagen: string | null; orden: number }[]) ?? [])]
+    .sort((a, b) => a.orden - b.orden)
+    .map((t) => ({ id: t.id, nombre: t.nombre, imagen: t.imagen }));
+
   return (
     <ProductForm
       mode="edit"
@@ -39,6 +47,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
       brands={brands ?? []}
       categories={categoriesMapped}
       initialImages={images}
+      initialTonos={tonos}
       defaultValues={{
         nombre: product.nombre,
         slug: product.slug,

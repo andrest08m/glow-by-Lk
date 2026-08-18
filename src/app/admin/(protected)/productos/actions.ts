@@ -80,6 +80,54 @@ async function applyImageManifest(db: AdminDb, productId: string, slug: string, 
   }
 }
 
+type TonoEntry = { id?: string; key: string; nombre: string; orden: number; hasNewImage: boolean };
+
+async function applyTonoManifest(db: AdminDb, productId: string, slug: string, formData: FormData) {
+  const raw = formData.get("tonoManifest");
+  if (!raw) return;
+
+  const manifest = JSON.parse(String(raw)) as TonoEntry[];
+  const keepIds = manifest.filter((e) => e.id).map((e) => e.id!);
+
+  const { data: current } = await db
+    .from("product_tonos")
+    .select("id,imagen")
+    .eq("product_id", productId);
+
+  // eliminar tonos quitados (y sus imágenes)
+  const toRemove = (current ?? []).filter((t) => !keepIds.includes(t.id));
+  await Promise.all(toRemove.filter((t) => t.imagen).map((t) => deleteImageByUrl(t.imagen!)));
+  if (toRemove.length > 0) {
+    await db.from("product_tonos").delete().in("id", toRemove.map((t) => t.id));
+  }
+
+  const currentById = new Map((current ?? []).map((t) => [t.id, t.imagen]));
+
+  for (const entry of manifest) {
+    const file = entry.hasNewImage ? formData.get(`tono-file-${entry.key}`) : null;
+    const nuevaUrl = file instanceof File ? await uploadImage(file, `${slug}/tonos`) : null;
+
+    if (entry.id) {
+      if (nuevaUrl) {
+        const vieja = currentById.get(entry.id);
+        if (vieja) await deleteImageByUrl(vieja);
+      }
+      await db
+        .from("product_tonos")
+        .update({
+          nombre: entry.nombre,
+          orden: entry.orden,
+          ...(nuevaUrl ? { imagen: nuevaUrl } : {}),
+        })
+        .eq("id", entry.id);
+    } else {
+      await db
+        .from("product_tonos")
+        .insert({ product_id: productId, nombre: entry.nombre, imagen: nuevaUrl, orden: entry.orden });
+    }
+  }
+}
+
 export async function createProduct(formData: FormData) {
   const { email } = await requireAdminSession();
   const db = createAdminClient();
@@ -128,6 +176,7 @@ export async function createProduct(formData: FormData) {
   }
 
   await applyImageManifest(db, product.id, product.slug, formData);
+  await applyTonoManifest(db, product.id, product.slug, formData);
   revalidateCatalog(product.slug);
   return { id: product.id };
 }
@@ -190,6 +239,7 @@ export async function updateProduct(id: string, formData: FormData) {
   }
 
   await applyImageManifest(db, id, slug, formData);
+  await applyTonoManifest(db, id, slug, formData);
   revalidateCatalog(slug);
   if (existing.slug !== slug) revalidateCatalog(existing.slug);
   return { id };
