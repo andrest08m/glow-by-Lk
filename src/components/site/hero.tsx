@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MessageCircle } from "lucide-react";
 import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/site/container";
 import { Button } from "@/components/ui/button";
 import { getSiteSettings } from "@/lib/site-settings";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 export async function Hero() {
   const settings = await getSiteSettings();
@@ -41,14 +42,32 @@ export async function Hero() {
             </p>
           </Reveal>
           <Reveal delay={0.3}>
-            <Button
-              size="lg"
-              className="h-11 gap-2 rounded-full bg-cream px-8 text-ink hover:bg-cream/90"
-              render={<Link href="/productos" />}
-            >
-              Ver catálogo
-              <ArrowRight className="size-4" />
-            </Button>
+            <div className="flex flex-col items-center gap-3 sm:flex-row">
+              <Button
+                size="lg"
+                className="h-11 gap-2 rounded-full bg-cream px-8 text-ink hover:bg-cream/90"
+                render={<Link href="/productos" />}
+              >
+                Ver catálogo
+                <ArrowRight className="size-4" />
+              </Button>
+              <Button
+                size="lg"
+                className="h-11 gap-2 rounded-full bg-whatsapp px-8 text-whatsapp-foreground hover:bg-whatsapp/90"
+                render={
+                  <a
+                    href={buildWhatsAppUrl(
+                      settings.whatsapp_number,
+                      "Hola glow by Lk, quiero hacer un pedido."
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+              >
+                <MessageCircle className="size-4" /> Escríbenos
+              </Button>
+            </div>
           </Reveal>
         </div>
       </div>
