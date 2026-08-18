@@ -1,11 +1,12 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ESTADOS_VENTA, bogotaStartOfMonth } from "@/lib/orders";
 import type { OrderStatus, ProductStatus } from "@/lib/supabase/database.types";
 
 export async function getDashboardData() {
   const supabase = createAdminClient();
 
-  const [metricasRes, ventasRes, topRes, pedidosRes, alertasRes] = await Promise.all([
+  const [metricasRes, ventasRes, topRes, pedidosRes, alertasRes, gananciaRes] = await Promise.all([
     supabase.rpc("dashboard_metricas"),
     supabase.rpc("ventas_por_dia", { p_dias: 30 }),
     supabase.rpc("top_productos", { p_limite: 6 }),
@@ -21,9 +22,33 @@ export async function getDashboardData() {
       .in("estado", ["POCO_STOCK", "AGOTADO"])
       .order("cantidad", { ascending: true })
       .limit(6),
+    // ganancia = precio de venta - costo, sobre pedidos que cuentan como venta
+    supabase
+      .from("orders")
+      .select("created_at,items:order_items(cantidad,precio_unitario,product:products(costo))")
+      .in("estado", ESTADOS_VENTA),
   ]);
 
   const m = (metricasRes.data ?? {}) as Record<string, number>;
+
+  // Ganancia neta (total y del mes) calculada en el server
+  const inicioMes = bogotaStartOfMonth().toISOString();
+  let gananciaTotal = 0;
+  let gananciaMes = 0;
+  for (const o of (gananciaRes.data as
+    | {
+        created_at: string;
+        items: { cantidad: number; precio_unitario: number; product: { costo: number | null } | null }[] | null;
+      }[]
+    | null) ?? []) {
+    let g = 0;
+    for (const it of o.items ?? []) {
+      const costo = Number(it.product?.costo ?? 0);
+      g += (Number(it.precio_unitario) - costo) * it.cantidad;
+    }
+    gananciaTotal += g;
+    if (o.created_at >= inicioMes) gananciaMes += g;
+  }
 
   const ventasPorDia = ((ventasRes.data as { fecha: string; total: number }[] | null) ?? []).map(
     (r) => ({ fecha: r.fecha, total: Number(r.total) })
@@ -70,6 +95,8 @@ export async function getDashboardData() {
   return {
     ventasHoy: { total: Number(m.ventas_hoy_total ?? 0), pedidos: Number(m.ventas_hoy_pedidos ?? 0) },
     ventasMes: { total: Number(m.ventas_mes_total ?? 0), pedidos: Number(m.ventas_mes_pedidos ?? 0) },
+    gananciaMes,
+    gananciaTotal,
     pedidosSemana: Number(m.pedidos_semana ?? 0),
     clientes: Number(m.clientes ?? 0),
     pocoStock: Number(m.poco_stock ?? 0),

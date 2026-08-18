@@ -8,6 +8,8 @@ import {
   AlertTriangle,
   PackageX,
   Sparkles,
+  TrendingUp,
+  PiggyBank,
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/admin/stat-card";
@@ -64,6 +66,33 @@ export default async function AdminDashboardPage() {
         </div>
         <StatCard label="Pedidos (7 días)" value={data.pedidosSemana} icon={ShoppingBag} />
         <StatCard label="Clientes" value={data.clientes} icon={Users} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="rounded-3xl border border-emerald-200/70 bg-emerald-50/50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">Ganancia del mes</span>
+            <div className="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+              <TrendingUp className="size-4.5" />
+            </div>
+          </div>
+          <p className="mt-3 font-heading text-2xl text-emerald-700 sm:text-3xl dark:text-emerald-300">
+            {formatCOP(data.gananciaMes)}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Precio de venta menos costo</p>
+        </div>
+        <div className="rounded-3xl border border-border/60 bg-card p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">Ganancia total (histórica)</span>
+            <div className="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+              <PiggyBank className="size-4.5" />
+            </div>
+          </div>
+          <p className="mt-3 font-heading text-2xl text-foreground sm:text-3xl">
+            {formatCOP(data.gananciaTotal)}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Sobre todos los pedidos vendidos</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
