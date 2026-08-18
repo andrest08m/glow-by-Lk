@@ -33,6 +33,8 @@ import { EstadoBadge } from "@/components/product/estado-badge";
 import { productSchema } from "@/lib/validations/product";
 import { toSlug } from "@/lib/slug";
 import { computeEstado } from "@/lib/product-status";
+import { formatCOP } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { createProduct, updateProduct } from "@/app/admin/(protected)/productos/actions";
 
 type FormState = {
@@ -118,6 +120,9 @@ export function ProductForm({
   const categoryId = form.watch("categoryId");
   const cantidad = form.watch("cantidad");
   const stockMinimo = form.watch("stockMinimo");
+  const precioW = form.watch("precio");
+  const costoW = form.watch("costo");
+  const ganancia = (Number(precioW) || 0) - (Number(costoW) || 0);
 
   const firstRender = useRef(true);
   useEffect(() => {
@@ -374,8 +379,8 @@ export function ProductForm({
           />
         </section>
 
-        <section className="grid gap-5 rounded-3xl border border-border/60 bg-card p-5 sm:grid-cols-3 sm:p-6">
-          <h2 className="font-heading text-lg text-foreground sm:col-span-3">Precios</h2>
+        <section className="grid gap-5 rounded-3xl border border-border/60 bg-card p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">
+          <h2 className="font-heading text-lg text-foreground sm:col-span-2 lg:col-span-4">Precios</h2>
 
           <FormField
             control={form.control}
@@ -412,17 +417,34 @@ export function ProductForm({
               <FormItem>
                 <FormLabel>Costo</FormLabel>
                 <FormControl>
-                  <Input type="number" inputMode="numeric" min={0} step={1} placeholder="Opcional · uso interno" {...field} />
+                  <Input type="number" inputMode="numeric" min={0} step={1} placeholder="Opcional" {...field} />
                 </FormControl>
-                <FormDescription>No se muestra en el catálogo público.</FormDescription>
+                <FormDescription>No se muestra al público.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          <FormItem>
+            <FormLabel>Ganancia neta</FormLabel>
+            <div
+              className={cn(
+                "flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-semibold",
+                ganancia > 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : ganancia < 0
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+              )}
+            >
+              {formatCOP(ganancia)}
+            </div>
+            <FormDescription>Precio menos costo (uso interno).</FormDescription>
+          </FormItem>
         </section>
 
-        <section className="grid gap-5 rounded-3xl border border-border/60 bg-card p-5 sm:grid-cols-3 sm:p-6">
-          <div className="flex items-center justify-between gap-3 sm:col-span-3">
+        <section className="grid gap-5 rounded-3xl border border-border/60 bg-card p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">
+          <div className="flex items-center justify-between gap-3 sm:col-span-2 lg:col-span-4">
             <h2 className="font-heading text-lg text-foreground">Inventario</h2>
             <EstadoBadge estado={previewEstado} />
           </div>
