@@ -384,7 +384,7 @@ export function ProductForm({
               <FormItem>
                 <FormLabel>Precio (COP)</FormLabel>
                 <FormControl>
-                  <Input type="number" inputMode="numeric" min={0} step={100} {...field} />
+                  <Input type="number" inputMode="numeric" min={0} step={1} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -398,7 +398,7 @@ export function ProductForm({
               <FormItem>
                 <FormLabel>Precio de oferta</FormLabel>
                 <FormControl>
-                  <Input type="number" inputMode="numeric" min={0} step={100} placeholder="Opcional" {...field} />
+                  <Input type="number" inputMode="numeric" min={0} step={1} placeholder="Opcional" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -412,7 +412,7 @@ export function ProductForm({
               <FormItem>
                 <FormLabel>Costo</FormLabel>
                 <FormControl>
-                  <Input type="number" inputMode="numeric" min={0} step={100} placeholder="Opcional · uso interno" {...field} />
+                  <Input type="number" inputMode="numeric" min={0} step={1} placeholder="Opcional · uso interno" {...field} />
                 </FormControl>
                 <FormDescription>No se muestra en el catálogo público.</FormDescription>
                 <FormMessage />

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminSession } from "@/lib/admin/guard";
 import { crearPedido, cambiarEstadoPedido } from "@/lib/order-service";
+import { mapRpcError } from "@/lib/inventory";
 import { createOrderSchema } from "@/lib/validations/order";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
@@ -68,6 +69,35 @@ export async function changeOrderStatusAction(
   } catch (error) {
     console.error("changeOrderStatusAction:", error);
     return { ok: false, error: error instanceof Error ? error.message : "No se pudo cambiar el estado." };
+  }
+}
+
+export async function editOrderItemsAction(
+  orderId: string,
+  items: { productId: string; cantidad: number }[]
+): Promise<OrderActionResult> {
+  const { email } = await requireAdminSession();
+  const db = createAdminClient();
+
+  if (items.length === 0) return { ok: false, error: "El pedido debe tener al menos un producto." };
+  const ids = items.map((i) => i.productId);
+  if (new Set(ids).size !== ids.length) {
+    return { ok: false, error: "Hay productos repetidos: usá una sola línea por producto." };
+  }
+
+  try {
+    const { data: order, error } = await db.rpc("editar_pedido_items", {
+      p_order_id: orderId,
+      p_items: items.map((i) => ({ product_id: i.productId, cantidad: i.cantidad })),
+      p_admin_email: email,
+    });
+    if (error) throw mapRpcError(error.message);
+
+    await revalidateOrderPages(db, orderId, (order as { customer_id: string | null }).customer_id, ids);
+    return { ok: true, id: orderId };
+  } catch (error) {
+    console.error("editOrderItemsAction:", error);
+    return { ok: false, error: error instanceof Error ? error.message : "No se pudo editar el pedido." };
   }
 }
 

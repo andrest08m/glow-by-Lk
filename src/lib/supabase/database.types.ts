@@ -185,6 +185,14 @@ export type Database = {
         Args: { p_order_id: string; p_admin_email?: string | null };
         Returns: undefined;
       };
+      editar_pedido_items: {
+        Args: {
+          p_order_id: string;
+          p_items: { product_id: string; cantidad: number }[];
+          p_admin_email?: string | null;
+        };
+        Returns: OrderRow;
+      };
       ventas_por_dia: { Args: { p_dias?: number }; Returns: { fecha: string; total: number }[] };
       top_productos: {
         Args: { p_limite?: number };

@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { OrderStatusBadge } from "@/components/admin/orders/order-status-badge";
 import { OrderStatusActions } from "@/components/admin/orders/order-status-actions";
+import { EditOrderItems } from "@/components/admin/orders/edit-order-items";
 import { MovementTypeBadge } from "@/components/admin/inventory/movement-type-badge";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
@@ -31,6 +32,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     .single();
 
   if (!data) notFound();
+
+  const { data: productos } = await db
+    .from("products")
+    .select("id,nombre,precio,precio_oferta,cantidad")
+    .eq("activo", true)
+    .order("nombre", { ascending: true });
 
   const d = data as unknown as {
     id: string;
@@ -103,11 +110,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             </p>
           </div>
         </div>
-        <OrderStatusActions
-          orderId={order.id}
-          estado={order.estado}
-          stockDescontado={order.stockDescontado}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <EditOrderItems
+            orderId={order.id}
+            initialItems={order.items.map((it) => ({ productId: it.product.id, cantidad: it.cantidad }))}
+            products={(productos ?? []).map((p) => ({
+              id: p.id,
+              nombre: p.nombre,
+              precio: Number(p.precio_oferta ?? p.precio),
+              stock: p.cantidad,
+            }))}
+          />
+          <OrderStatusActions
+            orderId={order.id}
+            estado={order.estado}
+            stockDescontado={order.stockDescontado}
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border/60 bg-card p-5">
